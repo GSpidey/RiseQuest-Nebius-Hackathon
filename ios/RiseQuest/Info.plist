@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>RiseQuest</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+	  <!-- Do not change NSAllowsArbitraryLoads to true, or you will risk app rejection! -->
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Show local weather and the location tools you choose to use.</string>
+	<!-- The linked location SDK references this API; the app requests when-in-use only. -->
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Show local weather and find places you choose. RiseQuest requests location while you use its location tools, not continuous background tracking.</string>
+	<!-- Required by the linked payment SDK's optional card scanner. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Scan payment card details if you choose the card-scanning option in checkout. Camera access is not needed for alarms.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Choose trusted contacts when you enable emergency support.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Record audio when you choose a voice feature.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Add the reminders you choose to your calendar.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Read and add calendar reminders only when you enable calendar integration.</string>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>Schedule the alarms and snoozes you create in RiseQuest.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>CFBundleURLTypes</key>
+	<array><dict><key>CFBundleURLSchemes</key><array><string>risequest</string></array></dict></array>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
+</dict>
+</plist>

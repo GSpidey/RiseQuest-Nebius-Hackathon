@@ -1,0 +1,59 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+  ext {
+    buildToolsVersion = "35.0.0"
+    minSdkVersion = 24
+    compileSdkVersion = 36
+    targetSdkVersion = 36
+    ndkVersion = "27.1.12297006"
+    kotlinVersion = "2.1.20"
+    playServicesLocationVersion = "21.0.1"
+  }
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    classpath('com.android.tools.build:gradle:8.11.0')
+    classpath('com.facebook.react:react-native-gradle-plugin')
+    classpath('com.google.gms:google-services:4.4.2')
+    classpath('org.jetbrains.kotlin:kotlin-gradle-plugin:' + kotlinVersion)
+  }
+}
+
+def reactNativeAndroidDir = new File(
+  providers.exec {
+    workingDir(rootDir)
+    commandLine("node", "--print", "require.resolve('react-native/package.json')")
+  }.standardOutput.asText.get().trim(),
+  "../android"
+)
+
+allprojects {
+  repositories {
+    maven {
+      // All of React Native (JS, Obj-C sources, Android binaries) is installed from npm
+      url(reactNativeAndroidDir)
+    }
+
+    google()
+    mavenCentral()
+    maven { url 'https://www.jitpack.io' }
+  }
+}
+
+apply plugin: "com.facebook.react.rootproject"
+
+// Keep generated C++ object paths below Windows limits without copying the
+// repository elsewhere. Nitro's generated receipt filenames are unusually long.
+subprojects { child ->
+  if (child.name in ["react-native-iap", "react-native-nitro-modules"]) {
+    child.afterEvaluate {
+      def nativeAndroid = child.extensions.getByName("android")
+      def shortName = child.name == "react-native-iap" ? "iap" : "nitro"
+      nativeAndroid.externalNativeBuild.cmake.buildStagingDirectory = rootProject.file("../.local/cxx/${shortName}")
+      nativeAndroid.defaultConfig.externalNativeBuild.cmake.arguments.add("-DCMAKE_OBJECT_PATH_MAX=220")
+    }
+  }
+}

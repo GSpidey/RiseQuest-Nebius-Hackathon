@@ -1,0 +1,85 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+ios/Pods/
+ios/.xcode.env.local
+ios/*.xcworkspace/xcuserdata/
+ios/**/*.xcodeproj/xcuserdata/
+*.ipa
+fastlane/report.xml
+fastlane/Preview.html
+
+# Android signing (local only)
+android/keystore.properties
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.local/
+.env*.local
+.env
+
+# typescript
+*.tsbuildinfo
+
+# Backend specific
+backend/node_modules/
+backend/.env
+backend/uploads/
+backend/logs/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Stripe test data
+test-webhooks/
+
+# Analytics and logs
+analytics-data/
+error-logs/
+
+# Production builds
+build/
+dist/
+
+# Sensitive configuration
+config/production.json
+config/staging.json
+
+# API keys and secrets (use .env instead)
+stripe-keys.json
+api-secrets.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

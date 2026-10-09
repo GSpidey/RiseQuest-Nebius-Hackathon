@@ -1,0 +1,52 @@
+diff --git a/node_modules/react-native-linear-gradient/index.ios.js b/node_modules/react-native-linear-gradient/index.ios.js
+index 0516630..49268d6 100644
+--- a/node_modules/react-native-linear-gradient/index.ios.js
++++ b/node_modules/react-native-linear-gradient/index.ios.js
+@@ -3,7 +3,7 @@
+  * @flow
+  */
+ import React, { Component, createRef } from 'react';
+-import { processColor } from 'react-native';
++import { processColor, StyleSheet, View } from 'react-native';
+ 
+ import NativeLinearGradient, { type Props } from './common';
+ 
+@@ -44,16 +44,27 @@ export default class LinearGradient extends Component<Props> {
+       useAngle,
+       angleCenter,
+       angle,
++      children,
++      style,
+       ...otherProps
+     } = this.props;
+     if ((colors && locations) && (colors.length !== locations.length)) {
+       console.warn('LinearGradient colors and locations props should be arrays of the same length');
+     }
+ 
++    // Match Android: Yoga lays out children in an ordinary View. Keeping
++    // children inside the legacy native view double-applies padding through
++    // Fabric interop on RN 0.81, clipping text and touch targets on iOS.
++    const flatStyle = StyleSheet.flatten(style) || {};
++    const radii = {};
++    for (const key of ['borderRadius', 'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius']) {
++      if (flatStyle[key] != null) radii[key] = flatStyle[key];
++    }
+     return (
++      <View ref={this.gradientRef} {...otherProps} style={style}>
+       <NativeLinearGradient
+-        ref={this.gradientRef}
+-        {...otherProps}
++        pointerEvents="none"
++        style={[StyleSheet.absoluteFill, radii]}
+         startPoint={convertPoint('start', start)}
+         endPoint={convertPoint('end', end)}
+         colors={colors.map(processColor)}
+@@ -62,6 +73,8 @@ export default class LinearGradient extends Component<Props> {
+         angleCenter={convertPoint('angleCenter', angleCenter)}
+         angle={angle}
+       />
++      {children}
++      </View>
+     );
+   }
+ }
