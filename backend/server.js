@@ -2768,9 +2768,6 @@ app.get('/api/coach/chat/history', requireAuth, async (req, res) => {
 app.post('/api/coach/chat', requireAuth, async (req, res) => {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
-    const model = process.env.OPENAI_TEXT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
-    const baseUrl = String(process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
-    const hasGemini = Boolean(String(process.env.GOOGLE_AI_KEY || process.env.GOOGLE_AI_STUDIO_KEY || process.env.GEMINI_API_KEY || '').trim());
 
     const userId = req.auth.userId;
     const message = String(req.body?.message || '').trim();
@@ -2780,7 +2777,7 @@ app.post('/api/coach/chat', requireAuth, async (req, res) => {
     if (!coaching.externalAllowed) return res.json({ success: true, reply: curatedReply(message), provider: 'curated' });
     const inputSafety = await checkAiSafety(message, coaching);
     if (!inputSafety.allowed) return res.json({ success: true, reply: inputSafety.reply, provider: 'curated' });
-    if (!apiKey && !hasGemini) return res.status(503).json({ error: 'Live coaching is temporarily unavailable' });
+    if (!apiKey) return res.status(503).json({ error: 'Live coaching is temporarily unavailable' });
 
     const personality = String(req.body?.personality || 'motivational').trim().toLowerCase();
     const allowed = new Set(['motivational', 'gentle', 'scientific', 'friendly', 'professional', 'strict', 'rude', 'fun']);
@@ -2800,66 +2797,10 @@ app.post('/api/coach/chat', requireAuth, async (req, res) => {
       content: String(m.content || '').slice(0, 900),
     }));
 
-    const style = {
-      motivational: 'Energetic, uplifting, practical.',
-      gentle: 'Calm, compassionate, low-pressure.',
-      scientific: 'Data-driven, evidence-seeking, no fake claims.',
-      friendly: 'Casual, warm, supportive.',
-      professional: 'Direct, structured, coach-like.',
-      strict: 'Firm, disciplined, but not insulting.',
-      rude: 'Sarcastic/edgy but not hateful or harassing; keep it playful.',
-      fun: 'Playful, humorous, upbeat, friendly.',
-    };
-
-    const systemPrompt =
-      'You are RiseQuest\'s AI Coach for sleep and morning routines. ' +
-      SAFETY_PROMPT +
-      `Saved preferences and recorded activity: ${JSON.stringify(coaching.context)}. ` +
-      `Personality style: ${style[resolved]}`;
-
-    let reply = '';
-    let provider = null;
-
-    if (apiKey) {
-      try {
-        const resp = await fetch(`${baseUrl}/chat/completions`, {
-          method: 'POST',
-          signal: AbortSignal.timeout(15000),
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            ...require('./src/services/openaiParameters').chatParameters(model, 0.7),
-            messages: [{ role: 'system', content: systemPrompt }, ...history],
-          }),
-        });
-
-        if (!resp.ok) {
-          throw new Error(`AI provider unavailable (${resp.status})`);
-        }
-
-        const data = await resp.json();
-        reply = String(data?.choices?.[0]?.message?.content || '').trim();
-        provider = 'openai';
-      } catch (e) {
-        console.warn('Primary coach provider could not complete the request.');
-      }
-    }
-
-    if (!reply) {
-      try {
-        const userPrompt = history.map((m) => `${m.role === 'assistant' ? 'Coach' : 'User'}: ${m.content}`).join('\n');
-        reply = await generateGeminiText({ system: systemPrompt, user: userPrompt, temperature: 0.7 });
-        provider = 'gemini';
-      } catch (e) {
-        console.warn('Fallback coach provider could not complete the request.');
-      }
-    }
-
-    if (!reply) return res.status(502).json({ error: 'Live coaching is temporarily unavailable. Your message was saved; please try again.' });
-    const outputSafety = await checkAiSafety(reply, coaching);
-    if (!outputSafety.allowed) { reply = outputSafety.reply; provider = 'curated'; }
+    const generated = await require('./src/services/coachGeneration').generateCoachReply({ coaching, history, personality: resolved });
+    if (generated.kind === 'unavailable') return res.status(502).json({ error: 'Live coaching is temporarily unavailable. Your message was saved; please try again.' });
+    const reply = generated.kind === 'generated' ? generated.value : generated.reply || curatedReply(message);
+    const provider = generated.kind === 'generated' ? generated.provider : 'curated';
 
     const saved = await prisma.coachChatMessage.create({
       data: { userId, role: 'assistant', personality: resolved, content: reply },

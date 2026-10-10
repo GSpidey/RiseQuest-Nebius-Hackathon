@@ -9,6 +9,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  AccessibilityInfo,
   StatusBar,
   Dimensions,
   Modal,
@@ -1561,7 +1562,7 @@ export default function App() {
     setAlarms(updatedAlarms);
     await AsyncStorage.setItem('risequest_alarms', JSON.stringify(updatedAlarms));
     
-    Alert.alert('Deleted', 'Alarm deleted successfully');
+    AccessibilityInfo.announceForAccessibility('Alarm deleted.');
   };
 
   const handleEnhancedAlarmDismiss = async (action, challengeSatisfied = false) => {
@@ -1654,7 +1655,8 @@ export default function App() {
       }
       
       updateUserStats(newStats);
-      Alert.alert('Great Job! 🎉', 'You successfully woke up! +50 XP, +10 RisePoints');
+      AccessibilityInfo.announceForAccessibility('Alarm stopped.');
+      Promise.resolve().then(() => refreshRisePointsBalance()).catch(() => {});
     } else if (action === 'snooze') {
       await postAlarmEvent('snooze', alarmForEvent, { source: 'enhanced_alarm' });
       updateUserStats({
@@ -1688,7 +1690,7 @@ export default function App() {
       
       setShowCreateAlarm(false);
       setEditingAlarm(null);
-      Alert.alert('Success!', result.existing ? 'Alarm updated successfully' : 'Alarm created successfully');
+      AccessibilityInfo.announceForAccessibility(result.existing ? 'Alarm updated.' : 'Alarm created.');
     } catch (error) {
       console.error('Error saving alarm:', error);
       Alert.alert('Alarm not scheduled', error?.message || 'Could not save alarm. Please check permissions and try again.');
@@ -2792,6 +2794,7 @@ export default function App() {
         >
           {showCreateAlarm && <SafeAreaProvider><CreateAlarmScreen
             initialAlarm={editingAlarm}
+            onRefreshBalances={refreshRisePointsBalance}
             onSave={saveAlarm}
             onCancel={() => setShowCreateAlarm(false)}
           /></SafeAreaProvider>}

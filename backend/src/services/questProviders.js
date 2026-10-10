@@ -1,7 +1,8 @@
 // Generation only. OpenAI moderation remains separate from provider selection.
 function questProviders(coaching, env = process.env) {
   const providers = [];
-  if (env.QUEST_AI_PROVIDER === 'nebius' && env.NEBIUS_API_KEY && env.NEBIUS_TEXT_MODEL &&
+  if (!coaching?.externalAllowed) return providers;
+  if ((env.AI_TEXT_PROVIDER || env.QUEST_AI_PROVIDER) === 'nebius' && env.NEBIUS_API_KEY && env.NEBIUS_TEXT_MODEL &&
       coaching?.externalAllowed && coaching.profile?.ageGroup === 'adult' &&
       !coaching.profile.managedByParent) {
     providers.push({
@@ -11,7 +12,7 @@ function questProviders(coaching, env = process.env) {
     });
   }
   const model = env.OPENAI_TEXT_MODEL || env.OPENAI_MODEL || 'gpt-4o-mini';
-  providers.push({ name: 'openai', apiKey: env.OPENAI_API_KEY, model,
+  if (env.OPENAI_API_KEY) providers.push({ name: 'openai', apiKey: env.OPENAI_API_KEY, model,
     baseUrl: String(env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, ''),
     parameters: require('./openaiParameters').chatParameters(model, 0.4),
   });

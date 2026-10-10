@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const { walletTransaction } = require('../security');
 const { loadCoachingContext, SAFETY_PROMPT, safePersonality } = require('./coachingContext');
-const { checkAiSafety } = require('./aiSafety');
+const { generateText } = require('./textGeneration');
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 const PREPARED = 'Good morning! Take a gentle breath, stretch if comfortable, and choose one small step for your day.';
 const fallback = () => ({ success: true, message: PREPARED, provider: 'curated', cost: 0, balance: null });
@@ -30,17 +30,16 @@ async function generateWakeup({ prisma, userId, input, key, generateGeminiText, 
   if (balance < cost) throw Object.assign(Error('Insufficient RisePoints'), { status: 400, balance, cost });
   let message = '', provider = 'openai';
   try {
-    if (!(await checkAiSafety(context.label, coaching, request)).allowed) return fallback();
     const system = `${SAFETY_PROMPT} Write one wake-up message under 240 characters. Style: ${styles[personality]}`;
     const user = JSON.stringify({ ...context, preferences: coaching.context });
-    const response = await request(`${String(process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '')}/chat/completions`, {
-      method: 'POST', signal: AbortSignal.timeout(15000), headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ ...require('./openaiParameters').chatParameters(process.env.OPENAI_TEXT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini', 0.6, 512),
-        messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
+    const result = await generateText({ coaching, safetyInput: context.label, request,
+      temperature: 0.6, maxTokens: 512,
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+      validate: value => value.length <= 240 ? value : null,
     });
-    if (response.ok) message = String((await response.json()).choices?.[0]?.message?.content || '').trim().slice(0, 240);
-    if (!message && generateGeminiText) { message = String(await generateGeminiText({ system, user, temperature: 0.6 })).trim().slice(0, 240); provider = 'gemini'; }
-    if (!message || !(await checkAiSafety(message, coaching, request)).allowed) return fallback();
+    if (result.kind !== 'generated') return fallback();
+    message = result.value;
+    provider = result.provider;
   } catch (_) { return fallback(); }
   // Only a generated, screened result is charged. Response and debit are in the
   // same transaction, so retries cannot double-charge or claim a false refund.

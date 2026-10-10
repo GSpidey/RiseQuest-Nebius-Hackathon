@@ -29,7 +29,7 @@ import PushNotification from 'react-native-push-notification';
 import { challengeDifficulty } from '../services/alarmEditing';
 import { createAlarmPreview } from '../services/alarmPreview';
 
-const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null }) => {
+const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBalances }) => {
   const pendingMessageRequest = useRef(null);
   const insets = useSafeAreaInsets();
   const [formHeight, setFormHeight] = useState(0);
@@ -80,6 +80,9 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null }) => {
   };
 
   const [generatingMessage, setGeneratingMessage] = useState(false);
+  const messageBusyRef = useRef(false);
+  const [messageNotice, setMessageNotice] = useState('');
+  const [messageError, setMessageError] = useState('');
 
   const AI_MESSAGE_COST = 25;
 
@@ -141,11 +144,14 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null }) => {
   };
 
   const generateWakeupMessage = async () => {
-    if (generatingMessage) return;
+    if (messageBusyRef.current) return;
+    messageBusyRef.current = true;
+    setMessageError('');
+    setMessageNotice('');
     try {
       const token = await getAuthToken();
       if (!token) {
-        Alert.alert('Sign in required', 'Please sign in to generate an AI wake-up message.');
+        setMessageError('Please sign in to generate a wake-up message.');
         return;
       }
 
@@ -178,19 +184,18 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null }) => {
       pendingMessageRequest.current = null;
 
       setAlarmData((prev) => ({ ...prev, customMessage: message }));
-      const bal = typeof json?.balance === 'number' ? json.balance : null;
-      const serverCost = typeof json?.cost === 'number' ? json.cost : AI_MESSAGE_COST;
       const refunded = Boolean(json?.refunded);
       const provider = json?.provider ? String(json.provider) : null;
 
       if (provider === 'curated' || provider === 'fallback' || refunded) {
-        Alert.alert('Prepared wake-up suggestion', `This is a prepared suggestion, not a live AI response. No Rise Points were charged.${bal != null ? ` Balance: ${bal}.` : ''}`);
-      } else {
-        Alert.alert('AI Message Ready', `${provider ? `${provider}: ` : ''}Spent ${serverCost} RP.${bal != null ? ` Remaining: ${bal}.` : ''}`);
+        setMessageNotice('Prepared suggestion · No RisePoints charged.');
       }
+      // The result is already visible. Refresh the normal wallet display quietly.
+      Promise.resolve().then(() => onRefreshBalances?.()).catch(() => {});
     } catch (e) {
-      Alert.alert('AI Message', e?.message ? String(e.message) : 'Failed to generate message');
+      setMessageError(e?.message ? String(e.message) : 'Could not generate a message. Please try again.');
     } finally {
+      messageBusyRef.current = false;
       setGeneratingMessage(false);
     }
   };
@@ -494,12 +499,13 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null }) => {
           <TextInput
             style={styles.textArea}
             value={alarmData.customMessage}
-            onChangeText={(customMessage) => setAlarmData({ ...alarmData, customMessage })}
+            onChangeText={(customMessage) => { setAlarmData({ ...alarmData, customMessage }); setMessageNotice(''); }}
             placeholder="Good morning! Today is going to be amazing!"
             multiline
             scrollEnabled={false}
             numberOfLines={3}
           />
+          {!!messageNotice && <Text style={styles.timeHint} accessibilityLiveRegion="polite">{messageNotice}</Text>}
           <Text style={styles.timeHint}>Read aloud when Text-to-speech is enabled in Settings and the alarm screen opens. The alarm tone may start first.</Text>
 
           <View style={styles.aiBlock}>
@@ -533,6 +539,8 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null }) => {
                 {generatingMessage ? 'Generating…' : `Generate message (${AI_MESSAGE_COST} RP)`}
               </Text>
             </TouchableOpacity>
+
+            {!!messageError && <Text style={styles.timeHint} accessibilityRole="alert" accessibilityLiveRegion="polite">{messageError}</Text>}
 
             {Platform.OS === 'android' && (
               <TouchableOpacity style={styles.aiLinkButton} onPress={openExactAlarmSettings}>

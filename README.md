@@ -4,7 +4,7 @@ RiseQuest is a React Native app with an Express/PostgreSQL backend. It combines 
 
 ## Nebius × NVIDIA integration
 
-The hackathon work extends the existing adult quest workflow rather than creating a second planner. `backend/src/services/questProviders.js` selects NVIDIA Nemotron through Nebius Token Factory for eligible adult requests. `aiSubtasks.js` validates structured steps and retains OpenAI fallback. OpenAI moderation is separate. Child requests receive curated steps without external generation calls.
+NVIDIA Nemotron through Nebius Token Factory powers eligible adult quest breakdowns, coaching replies and wake-up messages. `backend/src/services/textGeneration.js` shares provider routing, bounded requests, validated results and OpenAI fallback across all three paths. Safety moderation is separate: refusals are not retried with another generator. Child profiles receive curated routines without external generation or moderation calls.
 
 Set these backend environment variables using your own credentials:
 
@@ -16,7 +16,7 @@ OPENAI_API_KEY=
 OPENAI_TEXT_MODEL=gpt-5-mini
 ```
 
-The integration uses the hosted Token Factory API, not self-hosted NVIDIA GPU instances. Provider calls incur charges under your own account. No credentials are distributed here.
+The integration uses the hosted Token Factory API. Provider calls consume your account's credits or paid balance. Keep credentials server-side and use synthetic data for development.
 
 ## Demo
 
@@ -41,10 +41,10 @@ Email, Google/Apple sign-in and store billing require your own service configura
 ```sh
 cd backend
 npm ci
-npm test -- --runInBand test/questProviders.test.js test/aiSubtasks.test.js test/ai-safety.test.js test/openai-parameters.test.js
+npm test -- --runInBand
 ```
 
-These 27 tests cover provider selection, fallback, child isolation, output handling and safety boundaries. They are not a clinical assessment or comprehensive device acceptance.
+The backend suite covers provider selection, fallback, refusal handling, age restrictions, output validation, wallet retries, accounts and store billing. Mocked tests need no paid provider credentials. Use your own test accounts and service credentials for integration checks.
 
 ## Android development
 
@@ -59,10 +59,10 @@ In another terminal, use `cd android` then `./gradlew installDirectDebug` (`grad
 
 ## iOS source
 
-The iOS project is included. Building requires macOS/Xcode, CocoaPods and your own bundle identifier, signing and service configuration. No signing keys or provisioning profiles are included. This snapshot does not claim a fresh iOS build or device acceptance.
+The iOS project is included. Building requires macOS/Xcode, CocoaPods and your own bundle identifier, signing and service configuration. No signing keys or provisioning profiles are included.
 
-## Provenance and limits
+## Source and testing
 
-This is a source-only snapshot of RiseQuest, without private Git history or account data. RiseQuest existed before the event; hackathon updates added Nebius/NVIDIA quest generation, fallback, validation, tests and privacy disclosure. The live demo and private working app were tested separately; a successful focused test run is not proof that every integration works from a clean clone. Additional service credentials and configuration are required as described above.
+This public snapshot includes the app and backend source, setup instructions and regression tests. Private account data, signing credentials and deployment configuration are excluded. Additional service configuration is required for the integrations described above.
 
 MIT license: see `LICENSE`. Do not use production accounts, make real purchases, or enter sensitive personal information when testing.

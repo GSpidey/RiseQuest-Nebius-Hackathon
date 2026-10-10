@@ -49,7 +49,7 @@ function fallbackSubtasks(title, description, difficulty = 'medium') {
 }
 
 async function generateSubtasks({ title, description, difficulty = 'medium', category = 'general', coaching }) {
-  const providers = require('./questProviders').questProviders(coaching);
+  const { generateText } = require('./textGeneration');
 
   if (!process.env.OPENAI_API_KEY || !coaching?.externalAllowed) {
     return { source: coaching?.externalAllowed ? 'offline' : 'curated', subtasks: fallbackSubtasks(title, description, difficulty).map((t, i) => ({
@@ -70,44 +70,22 @@ async function generateSubtasks({ title, description, difficulty = 'medium', cat
     instructions: 'Return ONLY JSON: an array of 5-10 concise step objects with keys: title, description, estimatedMinutes (integer), difficulty (easy|medium|hard).',
   };
 
-  for (const { name, apiKey, model, baseUrl, parameters } of providers) {
   try {
-    const { checkAiSafety } = require('./aiSafety');
-    const inputSafety = await checkAiSafety(JSON.stringify(prompt), coaching);
-    if (!inputSafety.allowed) return { source: 'curated', subtasks: [
-      { title: 'Choose a safe, manageable routine', description: inputSafety.reply, order: 0, estimatedMinutes: 5, difficulty: 'easy' },
-    ] };
-    const resp = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      signal: AbortSignal.timeout(15000),
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        ...parameters,
+    const result = await generateText({ coaching, safetyInput: JSON.stringify(prompt),
         messages: [
           { role: 'system', content: require('./coachingContext').SAFETY_PROMPT + 'You are a task breakdown assistant for a productivity app.' },
           { role: 'user', content: JSON.stringify(prompt) },
         ],
-      }),
+        validate: content => {
+          const parsed = JSON.parse(content);
+          if (!Array.isArray(parsed) || !parsed.length || parsed.some(item => !item || typeof item.title !== 'string' || !item.title.trim())) return null;
+          return parsed;
+        },
     });
-
-    if (!resp.ok) {
-      throw new Error(`AI provider unavailable (${resp.status})`);
-    }
-
-    const data = await resp.json();
-    const content = data.choices?.[0]?.message?.content;
-    if (!content) throw new Error('OpenAI returned empty content');
-    const outputSafety = await checkAiSafety(content, coaching);
-    if (!outputSafety.allowed) throw new Error('Generated steps were not suitable.');
-
-    const parsed = JSON.parse(content);
-    if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('OpenAI returned invalid JSON array');
-
-    if (parsed.some(item => !item || typeof item.title !== 'string' || !item.title.trim())) throw new Error('Incomplete AI steps');
-    return { source: 'ai', provider: name, model, subtasks: parsed.slice(0, 12).map((item, i) => ({
+    if (result.kind === 'blocked') return { source: 'curated', subtasks: [
+      { title: 'Choose a safe, manageable routine', description: result.reply || 'Try a small everyday task that supports your wellbeing.', order: 0, estimatedMinutes: 5, difficulty: 'easy' },
+    ] };
+    if (result.kind === 'generated') return { source: 'ai', provider: result.provider, model: result.model, subtasks: result.value.slice(0, 12).map((item, i) => ({
       title: item.title.slice(0, 300),
       description: String(item.description || '').slice(0, 1500),
       order: i,
@@ -115,8 +93,7 @@ async function generateSubtasks({ title, description, difficulty = 'medium', cat
       difficulty: ['easy', 'medium', 'hard'].includes(item.difficulty) ? item.difficulty : difficulty,
     })) };
   } catch (e) {
-    // Try the next configured generation provider. Never log prompts or keys.
-  }
+    // Moderation failures retain prepared steps without bypassing screening.
   }
     const fallback = fallbackSubtasks(title, description, difficulty).map((t, i) => ({
       title: t,
