@@ -85,6 +85,9 @@ class RiseQuestAlarmAudio: RCTEventEmitter {
     }
   }
   private func customSound(_ alarm: [String: Any], id: UUID) throws -> String? {
+    if alarm["speechEnabled"] as? Bool == true, let uri = alarm["speechUri"] as? String {
+      return try spokenSound(alarm, uri: uri, id: id)
+    }
     guard alarm["selectedTone"] as? String == "custom", let uri = alarm["customToneUri"] as? String,
       let url = URL(string: uri), url.isFileURL else { return nil }
     // iOS alert sounds must be local, supported audio under 30 seconds.
@@ -100,6 +103,82 @@ class RiseQuestAlarmAudio: RCTEventEmitter {
       if FileManager.default.fileExists(atPath: target.path) { try FileManager.default.removeItem(at: target) }
       try FileManager.default.copyItem(at: url, to: target)
     }
+    return name
+  }
+  private func speechFolder() throws -> URL {
+    var folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("alarm-speech")
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    var values = URLResourceValues(); values.isExcludedFromBackup = true
+    try folder.setResourceValues(values)
+    return folder
+  }
+  @objc(cacheSpeech:encoded:resolver:rejecter:)
+  func cacheSpeech(_ fingerprint: String, encoded: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+    do {
+      guard fingerprint.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil,
+        encoded.count <= 1600100, let data = Data(base64Encoded: encoded), data.count >= 46, data.count <= 1200044,
+        String(data: data.prefix(4), encoding: .ascii) == "RIFF" else { throw NSError(domain: "RiseQuest", code: 3) }
+      let target = try speechFolder().appendingPathComponent("\(fingerprint).wav")
+      try data.write(to: target, options: .atomic)
+      try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: target.path)
+      resolve(target.absoluteString)
+    } catch { reject("SPEECH_CACHE", "Could not save this voice on your phone. Please retry.", error) }
+  }
+  @objc(hasSpeech:resolver:rejecter:)
+  func hasSpeech(_ fingerprint: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+    guard fingerprint.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil else { resolve(false); return }
+    do { resolve(FileManager.default.fileExists(atPath: try speechFolder().appendingPathComponent("\(fingerprint).wav").path)) }
+    catch { resolve(false) }
+  }
+  private func samples(_ url: URL) throws -> [Float] {
+    let file = try AVAudioFile(forReading: url)
+    guard file.length > 0, Double(file.length) / file.processingFormat.sampleRate < 30,
+      let input = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)),
+      let format = AVAudioFormat(standardFormatWithSampleRate: 24000, channels: 1),
+      let converter = AVAudioConverter(from: file.processingFormat, to: format),
+      let output = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 720000) else { throw NSError(domain: "RiseQuest", code: 4) }
+    try file.read(into: input)
+    var supplied = false
+    var conversionError: NSError?
+    let status = converter.convert(to: output, error: &conversionError) { _, state in
+      if supplied { state.pointee = .endOfStream; return nil }
+      supplied = true; state.pointee = .haveData; return input
+    }
+    if let error = conversionError { throw error }
+    guard status != .error, let channel = output.floatChannelData?[0], output.frameLength > 0 else { throw NSError(domain: "RiseQuest", code: 5) }
+    return Array(UnsafeBufferPointer(start: channel, count: Int(output.frameLength)))
+  }
+  private func spokenSound(_ alarm: [String: Any], uri: String, id: UUID) throws -> String {
+    guard let url = URL(string: uri), url.isFileURL,
+      url.deletingLastPathComponent().standardizedFileURL == (try speechFolder()).standardizedFileURL else { throw NSError(domain: "RiseQuest", code: 6) }
+    let voice = try samples(url)
+    let repeats = min(3, max(1, alarm["speechRepeats"] as? Int ?? 1))
+    var combined = Array(repeating: voice, count: repeats).flatMap { $0 }
+    if alarm["selectedTone"] as? String == "custom", let custom = alarm["customToneUri"] as? String,
+      let customURL = URL(string: custom), customURL.isFileURL {
+      combined += try samples(customURL)
+    } else {
+      // Locally generated gentle chime, no bundled third-party audio rights.
+      combined += (0..<72000).map { index -> Float in
+        let t = Double(index) / 24000
+        let envelope = exp(-3 * t.truncatingRemainder(dividingBy: 1))
+        return Float((sin(t * 2 * .pi * 660) + sin(t * 2 * .pi * 880) * 0.4) * envelope * 0.35)
+      }
+    }
+    guard combined.count < 720000 else {
+      throw NSError(domain: "RiseQuest", code: 7, userInfo: [NSLocalizedDescriptionKey: "On iPhone, voice repeats and the tone must fit under 30 seconds. Choose fewer repeats, a shorter message or the default tone."])
+    }
+    let folder = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent("Sounds")
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    let name = "risequest-spoken-\(id.uuidString).caf", target = folder.appendingPathComponent(name)
+    let format = AVAudioFormat(standardFormatWithSampleRate: 24000, channels: 1)!
+    let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(combined.count))!
+    buffer.frameLength = AVAudioFrameCount(combined.count)
+    combined.withUnsafeBufferPointer { source in buffer.floatChannelData![0].update(from: source.baseAddress!, count: combined.count) }
+    let output = try AVAudioFile(forWriting: target, settings: [AVFormatIDKey: kAudioFormatLinearPCM,
+      AVSampleRateKey: 24000, AVNumberOfChannelsKey: 1, AVLinearPCMBitDepthKey: 16,
+      AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false])
+    try output.write(from: buffer)
     return name
   }
   @objc(schedule:resolver:rejecter:)

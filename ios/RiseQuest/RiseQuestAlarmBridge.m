@@ -6,6 +6,8 @@ RCT_EXTERN_METHOD(pickTime:(NSInteger)hour minute:(NSInteger)minute resolver:(RC
 RCT_EXTERN_METHOD(schedule:(NSString *)json resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(cancel:(NSString *)alarmId resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(start:(NSString *)json)
+RCT_EXTERN_METHOD(cacheSpeech:(NSString *)fingerprint encoded:(NSString *)encoded resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(hasSpeech:(NSString *)fingerprint resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(stop:(NSString *)alarmId)
 RCT_EXTERN_METHOD(active:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 @end

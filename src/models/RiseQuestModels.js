@@ -78,6 +78,7 @@ export class UserProfileService {
         // TTS voice selection (device is free; cloud voices are subscription-gated in UI)
         ttsMode: userData.preferences?.ttsMode || 'device', // device|cloud
         ttsVoice: userData.preferences?.ttsVoice || null,
+        alarmVoiceId: userData.preferences?.alarmVoiceId || existing?.preferences?.alarmVoiceId || null,
         colorContrast: userData.preferences?.colorContrast || 'standard',
         dyslexiaFriendly: userData.preferences?.dyslexiaFriendly || false,
         

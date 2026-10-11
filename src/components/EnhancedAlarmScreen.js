@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   NativeModules,
+  Linking,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { WeatherService, MotivationalService } from '../utils/AIServices';
@@ -17,6 +18,8 @@ import Tts from 'react-native-tts';
 import Sound from 'react-native-sound';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getBackendBaseUrl } from '../config/backendConfig';
+import { resolveAlarmBuddy, dialablePhone } from '../services/wakeBuddy';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function EnhancedAlarmScreen({
   alarm,
@@ -29,8 +32,35 @@ export default function EnhancedAlarmScreen({
   const [weather, setWeather] = useState(null);
   const [motivation, setMotivation] = useState(null);
   const [locationContext, setLocationContext] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [wakeBuddy, setWakeBuddy] = useState(null);
+  const [buddyError, setBuddyError] = useState('');
+  const [contactingBuddy, setContactingBuddy] = useState(false);
+  useEffect(() => {
+    let live = true;
+    resolveAlarmBuddy(AsyncStorage, alarm).then(buddy => { if (live) setWakeBuddy(buddy); })
+      .catch(() => { if (live) setBuddyError('Could not load your buddy. You can still stop or snooze the alarm.'); });
+    return () => { live = false; };
+  }, [alarm?.wakeBuddyId]);
+  const contactBuddy = async () => {
+    if (challengeLocked || contactingBuddy) return;
+    setContactingBuddy(true);
+    try {
+      // Resolve again so removed contacts cannot be called from an old alarm.
+      const buddy = await resolveAlarmBuddy(AsyncStorage, alarm);
+      const phone = dialablePhone(buddy?.phone);
+      if (!phone) throw new Error('This buddy is no longer available. Choose another when editing your alarm.');
+      Alert.alert('Contact your wake-up buddy?', `Snooze for 5 minutes and open ${buddy.name} in your phone dialer? You choose whether to place the call.`, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Snooze & open dialer', onPress: async () => {
+          await onDismiss('snooze');
+          try { await Linking.openURL(`tel:${phone}`); }
+          catch (_) { Alert.alert('Dialer unavailable', 'Your alarm is snoozed. Open your phone app to contact your buddy. No call was placed.'); }
+        } },
+      ]);
+    } catch (error) { setBuddyError(error.message || 'Could not open your buddy. Please retry.'); }
+    finally { setContactingBuddy(false); }
+  };
 
   useEffect(() => {
     loadEnhancedData();
@@ -39,6 +69,9 @@ export default function EnhancedAlarmScreen({
   }, []);
 
   useEffect(() => {
+    // Native playback owns downloaded speech and its transition to the tone.
+    // Do not speak it again or make a network request when React opens.
+    if (alarm?.speechEnabled && alarm?.speechUri) return;
     const enabled = Boolean(userProfile?.preferences?.ttsEnabled);
     const text = String(alarm?.customMessage || '').trim();
     const shouldSpeak = Boolean(enabled && text);
@@ -263,7 +296,6 @@ export default function EnhancedAlarmScreen({
 
   const loadEnhancedData = async () => {
     try {
-      setLoading(true);
       
       // Load weather data if enabled
       let weatherData = null;
@@ -293,8 +325,6 @@ export default function EnhancedAlarmScreen({
 
     } catch (error) {
       console.error('Enhanced alarm data load error:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -336,20 +366,6 @@ export default function EnhancedAlarmScreen({
     const settings = LocationService.getLocationBasedAlarmSettings(locationContext);
     return settings.message;
   };
-
-  if (loading) {
-    return (
-      <LinearGradient
-        colors={['#667eea', '#764ba2']}
-        style={styles.container}
-      >
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#fff" />
-          <Text style={styles.loadingText}>Preparing your wake-up experience...</Text>
-        </View>
-      </LinearGradient>
-    );
-  }
 
   return (
     <LinearGradient
@@ -427,35 +443,14 @@ export default function EnhancedAlarmScreen({
           </View>
         </View>
 
-        {/* Action Buttons */}
-        <View style={styles.buttonContainer}>
-          {challengeLocked ? (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.dismissButton]}
-              onPress={() => onDismiss('challenge')}
-            >
-              <Text style={styles.buttonText}>🎮 Start Challenge</Text>
-            </TouchableOpacity>
-          ) : (
-            <>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.snoozeButton]}
-                onPress={handleSnooze}
-              >
-                <Text style={styles.buttonText}>
-                  {alarm.challengeMode && userStats.level >= 3 ? '🎮 Challenge Snooze' : '😴 Snooze'}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.actionButton, styles.dismissButton]}
-                onPress={() => onDismiss('dismiss')}
-              >
-                <Text style={styles.buttonText}>✅ I'm Awake!</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
+        {!challengeLocked && alarm.snoozeEnabled !== false && wakeBuddy && <TouchableOpacity
+          accessibilityRole="button" disabled={contactingBuddy}
+          style={[styles.actionButton, { backgroundColor: '#E5F6F0', marginBottom: 12 }]}
+          onPress={contactBuddy}>
+          <Text style={{ color: '#235F54', fontSize: 17, fontWeight: '700', textAlign: 'center' }}>🤝 Contact {wakeBuddy.name}</Text>
+          <Text style={{ color: '#52645E', textAlign: 'center', marginTop: 5 }}>Snooze & open your buddy’s number</Text>
+        </TouchableOpacity>}
+        {!!buddyError && <Text accessibilityLiveRegion="polite" style={{ color: '#FFF', marginBottom: 12 }}>{buddyError}</Text>}
 
         {/* Importance Indicator */}
         {(alarm.importanceLevel || alarm.importance) !== 'normal' && (
@@ -466,6 +461,20 @@ export default function EnhancedAlarmScreen({
           </View>
         )}
       </ScrollView>
+      <SafeAreaView edges={['bottom']} style={{ paddingHorizontal: 20, backgroundColor: 'rgba(52,40,85,0.18)' }}>
+        <View style={[styles.buttonContainer, { marginTop: 12, marginBottom: 12 }]}>
+          {challengeLocked ? <TouchableOpacity style={[styles.actionButton, styles.dismissButton]} onPress={() => onDismiss('challenge')}>
+            <Text style={styles.buttonText}>🎮 Start Challenge</Text>
+          </TouchableOpacity> : <>
+            {alarm.snoozeEnabled !== false && <TouchableOpacity style={[styles.actionButton, styles.snoozeButton]} onPress={handleSnooze}>
+              <Text style={styles.buttonText}>{alarm.challengeMode && userStats.level >= 3 ? '🎮 Challenge Snooze' : '😴 Snooze'}</Text>
+            </TouchableOpacity>}
+            <TouchableOpacity style={[styles.actionButton, styles.dismissButton]} onPress={() => onDismiss('dismiss')}>
+              <Text style={styles.buttonText}>✅ I'm Awake!</Text>
+            </TouchableOpacity>
+          </>}
+        </View>
+      </SafeAreaView>
     </LinearGradient>
   );
 }

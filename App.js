@@ -1,6 +1,7 @@
 import { getAuthToken, setAuthToken, clearAuthToken } from './src/services/AuthTokenStorage';
 import { checkStoredSession } from './src/services/sessionValidation';
 import { challengeDifficulty, prepareAlarmSave, persistAlarmEdit } from './src/services/alarmEditing';
+import { nextWakeStreak } from './src/services/wakeStreak';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
@@ -284,6 +285,7 @@ export default function App() {
   const [showSupportCenter, setShowSupportCenter] = useState(false);
   const [upgradeSource, setUpgradeSource] = useState('general');
   const [currentActiveAlarm, setCurrentActiveAlarm] = useState(null);
+  const closedAlarmUntilRef = useRef(new Map());
   const [currentGameType, setCurrentGameType] = useState('math');
   const [subscription, setSubscription] = useState(null);
 
@@ -452,6 +454,9 @@ export default function App() {
 
   const startAlarmTakeover = (alarm, metadata = {}) => {
     if (!alarm) return;
+    // A pending native active() result can arrive after Stop/Snooze. Never let
+    // that stale result restart the service while native shutdown completes.
+    if ((closedAlarmUntilRef.current.get(String(alarm.id)) || 0) > Date.now()) return;
     NativeModules.RiseQuestAlarmAudio?.start(JSON.stringify({
       ...alarm, id: String(alarm.id),
       notificationId: String(alarm.notificationId || toNotificationIntId(alarm.id)),
@@ -581,6 +586,8 @@ export default function App() {
           alarmId: String(alarm.id),
           notificationId: String(notificationId),
           toneUri: alarm.selectedTone === 'custom' ? String(alarm.customToneUri || '') : '',
+          speechUri: alarm.speechEnabled ? String(alarm.speechUri || '') : '',
+          speechRepeats: String(Math.min(3, Math.max(1, Number(alarm.speechRepeats) || 1))),
           startVolume: String(alarm.startVolume ?? 0.35),
           maxVolume: String(alarm.maxVolume ?? 1),
           volumeCurve: String(alarm.volumeCurve || 'gentle'),
@@ -1601,6 +1608,9 @@ export default function App() {
     }
 
     if (alarmForEvent) {
+      const alarmKey = String(alarmForEvent.id);
+      if ((closedAlarmUntilRef.current.get(alarmKey) || 0) > Date.now()) return;
+      closedAlarmUntilRef.current.set(alarmKey, Date.now() + 10000);
       NativeModules.RiseQuestAlarmAudio?.stop(String(alarmForEvent.id));
       // Audio and both overlays must stop before storage/network bookkeeping.
       setShowMiniGame(false);
@@ -1627,10 +1637,11 @@ export default function App() {
     if (action === 'dismiss') {
       await postAlarmEvent('dismiss', alarmForEvent, { source: 'enhanced_alarm' });
       // Update stats for successful wake-up
+      const wakeDay = nextWakeStreak(userStats);
       const newStats = {
         ...userStats,
         totalWakeUps: userStats.totalWakeUps + 1,
-        streak: userStats.streak + 1,
+        streak: wakeDay.streak,
         experience: userStats.experience + 50,
         level: Math.floor((userStats.experience + 50) / 100) + 1,
         lastWakeUpAt: new Date().toISOString(),
@@ -1645,7 +1656,7 @@ export default function App() {
       }
       
       // Check for streak milestones and potential upsells
-      if (newStats.streak > 0 && newStats.streak % 7 === 0) {
+      if (wakeDay.newDay && newStats.streak > 0 && newStats.streak % 7 === 0) {
         if (!isGuest) {
           await MonetizationService.addRisePoints(
             MonetizationService.RISE_POINT_REWARDS.STREAK_MILESTONE,
@@ -1700,7 +1711,7 @@ export default function App() {
       AccessibilityInfo.announceForAccessibility(result.existing ? 'Alarm updated.' : 'Alarm created.');
     } catch (error) {
       console.error('Error saving alarm:', error);
-      Alert.alert('Alarm not scheduled', error?.message || 'Could not save alarm. Please check permissions and try again.');
+      throw error;
     }
   };
 

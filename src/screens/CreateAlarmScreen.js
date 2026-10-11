@@ -30,6 +30,10 @@ import { challengeDifficulty } from '../services/alarmEditing';
 import { createAlarmPreview } from '../services/alarmPreview';
 import ModalHeading from '../components/ModalHeading';
 import { sunrise } from '../components/SunriseUI';
+import { loadAlarmVoices, prepareAlarmVoice } from '../services/alarmSpeech';
+import { UserProfileService } from '../models/RiseQuestModels';
+import AlarmBuddyPicker from '../components/AlarmBuddyPicker';
+import { resolveAlarmBuddy } from '../services/wakeBuddy';
 
 const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBalances }) => {
   const pendingMessageRequest = useRef(null);
@@ -44,6 +48,9 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
     challengeMode: false,
     weatherAlert: true,
     customMessage: '',
+    speechEnabled: false,
+    speechRepeats: 1,
+    speechConsent: false,
     aiPersonality: 'motivational',
     selectedTone: 'default',
     customToneUri: null,
@@ -54,6 +61,16 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
     challengeDifficulty: challengeDifficulty(initialAlarm),
   });
   const [saving, setSaving] = useState(false);
+  const [fullScreenAllowed, setFullScreenAllowed] = useState(null);
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    let live = true;
+    const check = () => NativeModules.RiseQuestAlarmAudio?.canPresentFullScreen?.()
+      .then(allowed => { if (live) setFullScreenAllowed(allowed); }).catch(() => {});
+    check();
+    const subscription = AppState.addEventListener('change', state => { if (state === 'active') check(); });
+    return () => { live = false; subscription.remove(); };
+  }, []);
   const saveBusyRef = useRef(false);
   const [previewPlaying, setPreviewPlaying] = useState(false);
   const previewRef = useRef(null);
@@ -84,6 +101,29 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
   const messageBusyRef = useRef(false);
   const [messageNotice, setMessageNotice] = useState('');
   const [messageError, setMessageError] = useState('');
+  const [voiceCatalog, setVoiceCatalog] = useState(null);
+  const [showVoices, setShowVoices] = useState(false);
+  const [speechError, setSpeechError] = useState('');
+  const [defaultVoice, setDefaultVoice] = useState('');
+  useEffect(() => {
+    let live = true;
+    Promise.all([loadAlarmVoices(), UserProfileService.getUserProfile()]).then(([catalog, profile]) => {
+      if (!live) return;
+      setVoiceCatalog(catalog);
+      const voice = profile?.preferences?.alarmVoiceId;
+      setDefaultVoice(voice || '');
+      if (!initialAlarm?.voiceId) setAlarmData(previous => ({ ...previous,
+        voiceId: catalog.voices.some(v => v.id === voice) ? voice : catalog.voices[0]?.id }));
+    }).catch(() => { if (live) setVoiceCatalog({ unavailable: true, voices: [], cost: 10 }); });
+    return () => { live = false; };
+  }, []);
+  const saveDefaultVoice = async () => {
+    try {
+      const profile = await UserProfileService.getUserProfile();
+      await UserProfileService.updateProfile({ preferences: { ...profile.preferences, alarmVoiceId: alarmData.voiceId } });
+      setDefaultVoice(alarmData.voiceId); setSpeechError('');
+    } catch (_) { setSpeechError('Could not save your default voice. Please retry.'); }
+  };
 
   const AI_MESSAGE_COST = 25;
 
@@ -423,6 +463,7 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
     if (saveBusyRef.current) return;
     saveBusyRef.current = true;
     setSaving(true);
+    setSpeechError('');
     try {
       const normalized = normalizeToHHMM(alarmData.time);
       if (!normalized) {
@@ -430,15 +471,20 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
         return;
       }
 
-      const newAlarm = {
+      let newAlarm = {
         ...alarmData,
         time: normalized,
       };
 
+      if (newAlarm.wakeBuddyId && !(await resolveAlarmBuddy(AsyncStorage, newAlarm))) {
+        throw new Error('Your selected buddy is no longer available. Choose another buddy or select No buddy.');
+      }
+      newAlarm = await prepareAlarmVoice(newAlarm, voiceCatalog?.cost || 10);
+      setAlarmData(newAlarm);
+      if (newAlarm.speechEnabled) Promise.resolve(onRefreshBalances?.()).catch(() => {});
       await onSave(newAlarm);
     } catch (error) {
-      Alert.alert('Error', 'Failed to save alarm. Please try again.');
-      console.error('Error creating alarm:', error);
+      setSpeechError(error?.message || 'Failed to save alarm. Please retry.');
     } finally {
       saveBusyRef.current = false;
       setSaving(false);
@@ -457,12 +503,15 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
             {Number.parseInt(String(Platform.Version), 10) >= 26
               ? 'Uses iPhone system alarms. iOS always permits Stop on the lock screen; challenges are optional in the app.'
               : 'Uses notifications on this iOS version. Sound is brief and follows Focus/silent settings; continuous background ringing is not available.'}
-            {'\n'}Spoken messages play when RiseQuest is open. Custom iOS alarm sounds must be WAV, CAF or AIFF and shorter than 30 seconds.
+            {'\n'}Saved realistic voices play as part of the alarm sound. Voice repeats and tone together must fit under 30 seconds on iOS. Custom sounds must be WAV, CAF or AIFF.
           </Text>}
           <Text style={styles.headerSubtitle}>Set up your wake-up experience</Text>
         </LinearGradient>
 
         <ScrollView
+          pointerEvents={saving ? 'none' : 'auto'}
+          accessibilityElementsHidden={saving}
+          importantForAccessibility={saving ? 'no-hide-descendants' : 'auto'}
           style={styles.content}
           contentContainerStyle={{ padding: 24, paddingBottom: 32 + (insets.bottom || 0) }}
           keyboardShouldPersistTaps="handled"
@@ -492,7 +541,20 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
           />
         </View>
 
+        <AlarmBuddyPicker value={alarmData.wakeBuddyId} onChange={wakeBuddyId => setAlarmData(previous => ({ ...previous, wakeBuddyId }))} />
+
         {/* Custom Message */}
+        {Platform.OS === 'android' && <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Alarm pop-up</Text>
+          <Text style={styles.timeHint}>{fullScreenAllowed === false
+            ? 'Allow full-screen alarms so the wake-up screen can appear over the lock screen. Your alarm still rings if this is off.'
+            : 'The wake-up screen can appear over the lock screen. While you’re using your phone, Android may show a pop-up banner instead.'}</Text>
+          {fullScreenAllowed === false && <TouchableOpacity accessibilityRole="button"
+            onPress={() => NativeModules.RiseQuestAlarmAudio.openFullScreenSettings().catch(() => setSpeechError('Open Android Settings > Apps > Special access > Full-screen alerts, then enable RiseQuest.'))}>
+            <Text style={styles.aiLinkText}>Enable alarm pop-up</Text>
+          </TouchableOpacity>}
+        </View>}
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>💬 Custom Wake-up Message</Text>
           <TextInput
@@ -505,7 +567,45 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
             numberOfLines={3}
           />
           {!!messageNotice && <Text style={styles.timeHint} accessibilityLiveRegion="polite">{messageNotice}</Text>}
-          <Text style={styles.timeHint}>Read aloud when Text-to-speech is enabled in Settings and the alarm screen opens. The alarm tone may start first.</Text>
+          {!alarmData.speechEnabled && <Text style={styles.timeHint}>Device speech is available in Settings and plays when the alarm screen opens.</Text>}
+          <View style={styles.aiBlock}>
+            <Text style={styles.aiTitle}>A familiar start to your morning</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ color: '#342855', fontSize: 16, flex: 1 }}>Realistic voice before the alarm tone</Text>
+              <Switch accessibilityLabel="Realistic wake-up voice" value={!!alarmData.speechEnabled}
+                disabled={saving || (!alarmData.speechEnabled && !voiceCatalog?.eligible)}
+                onValueChange={speechEnabled => setAlarmData(previous => ({ ...previous, speechEnabled }))} />
+            </View>
+            {voiceCatalog?.unavailable ? <Text style={styles.timeHint}>Voice choices could not load. Check your connection and reopen this form. Saved voices and device speech remain available.</Text>
+              : voiceCatalog && !voiceCatalog.eligible ? <Text style={styles.timeHint}>Realistic voices require an eligible adult account. Device speech remains available in Settings.</Text> : null}
+            {!!alarmData.speechEnabled && <>
+              <TouchableOpacity style={styles.aiPill} accessibilityRole="button" onPress={() => setShowVoices(true)}>
+                <Text style={styles.aiPillText}>Voice: {voiceCatalog?.voices.find(v => v.id === alarmData.voiceId)?.name || 'Choose a voice'}  ›</Text>
+              </TouchableOpacity>
+              <TouchableOpacity accessibilityRole="button" disabled={defaultVoice === alarmData.voiceId} onPress={saveDefaultVoice}>
+                <Text style={styles.aiLinkText}>{defaultVoice === alarmData.voiceId ? 'Your default for new alarms' : 'Use this as my default voice'}</Text>
+              </TouchableOpacity>
+              <Text style={styles.timeHint}>Read the message</Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {[1, 2, 3].map(n => <TouchableOpacity key={n} accessibilityRole="radio" accessibilityState={{ checked: alarmData.speechRepeats === n }}
+                  style={[styles.aiPill, alarmData.speechRepeats === n && styles.aiPillActive]}
+                  onPress={() => setAlarmData(previous => ({ ...previous, speechRepeats: n }))}>
+                  <Text style={styles.aiPillText}>{n} {n === 1 ? 'time' : 'times'}</Text>
+                </TouchableOpacity>)}
+              </View>
+              <Text style={styles.timeHint}>Prepare on save · {voiceCatalog?.cost || 10} RP for a new message or voice. Unchanged saves and alarm playback are free. Downloaded audio works offline.</Text>
+              {Platform.OS === 'ios' && <Text style={styles.timeHint}>iPhone plays a combined voice-and-tone clip; system alarms may repeat that clip. For longer messages choose fewer repeats.</Text>}
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Switch accessibilityLabel="Allow message text to Async for voice generation" value={!!alarmData.speechConsent}
+                  onValueChange={speechConsent => setAlarmData(previous => ({ ...previous, speechConsent }))} />
+                <Text style={[styles.timeHint, { flex: 1 }]}>Send this message text to Async to prepare the voice. No profile or location is sent.</Text>
+              </View>
+              {!!alarmData.speechUri && alarmData.speechText === alarmData.customMessage.trim() && alarmData.speechVoiceId === alarmData.voiceId &&
+                <TouchableOpacity style={styles.aiPill} onPress={() => previewPlaying ? stopPreview() : previewRef.current.play(alarmData.speechUri)}>
+                  <Text style={styles.aiPillText}>{previewPlaying ? 'Stop preview' : 'Listen to saved voice'}</Text>
+                </TouchableOpacity>}
+            </>}
+          </View>
 
           <View style={styles.aiBlock}>
             <Text style={styles.aiTitle}>🤖 AI Message (cost: {AI_MESSAGE_COST} RisePoints)</Text>
@@ -832,9 +932,11 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
         </View>
       </Modal>
 
+      {saving && <Text style={styles.timeHint} accessibilityLiveRegion="polite">{alarmData.speechEnabled ? 'Preparing voice and saving alarm…' : 'Saving alarm…'}</Text>}
+      {!!speechError && <Text style={[styles.timeHint, { color: '#9B1C32', paddingHorizontal: 20 }]} accessibilityRole="alert" accessibilityLiveRegion="polite">{speechError}</Text>}
       {/* Action Buttons */}
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.cancelButton} onPress={() => { stopPreview(); onCancel(); }}>
+        <TouchableOpacity style={styles.cancelButton} disabled={saving} onPress={() => { stopPreview(); onCancel(); }}>
           <Text style={styles.cancelButtonText}>Cancel</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={saving}>
@@ -842,6 +944,24 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
         </TouchableOpacity>
       </View>
       </View>
+      <Modal visible={showVoices} transparent animationType="slide" onRequestClose={() => setShowVoices(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(30,22,50,0.55)', justifyContent: 'center', padding: 22 }}>
+          <View style={{ backgroundColor: '#FFF9F2', borderRadius: 28, padding: 22, height: '85%' }}>
+            <ModalHeading icon="sunny" title="Choose your morning voice" description="A small collection of warm, clear voices for a personal start." />
+            <ScrollView style={{ flex: 1 }}>
+              {(voiceCatalog?.voices || []).map(voice => <TouchableOpacity key={voice.id} accessibilityRole="radio"
+                accessibilityState={{ checked: alarmData.voiceId === voice.id }}
+                onPress={() => { setAlarmData(previous => ({ ...previous, voiceId: voice.id })); setShowVoices(false); }}
+                style={{ padding: 16, marginBottom: 8, borderRadius: 18, borderWidth: 2,
+                  borderColor: alarmData.voiceId === voice.id ? '#7851C9' : '#EEE4D8', backgroundColor: '#FFF' }}>
+                <Text style={{ fontSize: 18, color: '#342855', fontWeight: '700' }}>{voice.name}</Text>
+                <Text style={{ color: '#655E70', marginTop: 5 }}>{voice.description}</Text>
+              </TouchableOpacity>)}
+            </ScrollView>
+            <TouchableOpacity accessibilityRole="button" style={{ padding: 16, alignItems: 'center' }} onPress={() => setShowVoices(false)}><Text style={styles.aiLinkText}>Done</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };

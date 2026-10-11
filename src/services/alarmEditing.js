@@ -21,8 +21,17 @@ async function persistAlarmEdit(result, { persist, cancel, schedule }) {
   // A storage failure leaves the old schedule intact. Reuse the notification ID
   // so changing the time never leaves a second pending alarm behind.
   await persist(result.alarms);
-  if (result.existing) await cancel(result.existing);
-  if (result.alarm.isEnabled !== false) await schedule(result.alarm);
+  try {
+    if (result.existing) await cancel(result.existing);
+    if (result.alarm.isEnabled !== false) await schedule(result.alarm);
+  } catch (error) {
+    const previous = result.existing
+      ? result.alarms.map(a => String(a.id) === String(result.existing.id) ? result.existing : a)
+      : result.alarms.filter(a => String(a.id) !== String(result.alarm.id));
+    await persist(previous);
+    if (result.existing?.isEnabled !== false && result.existing) await schedule(result.existing);
+    throw error;
+  }
 }
 
 module.exports = { challengeDifficulty, prepareAlarmSave, persistAlarmEdit };

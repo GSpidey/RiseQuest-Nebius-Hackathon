@@ -38,6 +38,12 @@ async function completeDeletion(job, { prisma, stripe, secret, uploadsDir, revok
   }
   if (user.appleIdentity) await revokeApple(user.appleIdentity, secret);
   const ids = [user.id, ...user.managedChildren.map(c => c.childId)];
+  for (const id of ids) {
+    const root = path.resolve(uploadsDir, 'tts', 'alarm');
+    const owned = path.resolve(root, require('./services/alarmSpeech').ownerFolder(id));
+    if (path.dirname(owned) !== root) throw Error('Invalid speech cache owner');
+    await fs.rm(owned, { recursive: true, force: true });
+  }
   const media = [user, ...user.managedChildren.map(c => c.child)]
     .flatMap(u => [ownedMediaPath(u.photoUrl, uploadsDir), ownedMediaPath(u.bannerUrl, uploadsDir)]).filter(Boolean);
   // Media unlink is idempotent. An interrupted job can safely repeat it.

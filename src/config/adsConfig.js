@@ -1,6 +1,7 @@
-// Public ad identifiers, not credentials. Test IDs remain enforced until the
-// release checklist has verified consent, age handling and Premium exclusion.
-export const ADS_USE_TEST_UNITS = true;
+// Public ad identifiers, not credentials. Production uses RiseQuest's real
+// units; development and non-RN test environments retain Google's test units.
+// Consent, age, Premium and placement gates apply to both configurations.
+export const ADS_USE_TEST_UNITS = typeof __DEV__ === 'undefined' || __DEV__;
 export const GOOGLE_AD_UNITS = Object.freeze({
   android: {
     banner: 'ca-app-pub-1287816657887096/9493760872',

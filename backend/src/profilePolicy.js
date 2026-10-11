@@ -65,6 +65,10 @@ function sanitizeProfile(input, existing = {}) {
       if (p.ttsVoice !== null && (typeof p.ttsVoice !== 'string' || p.ttsVoice.length > 150)) throw invalid('Invalid voice');
       data.preferences.ttsVoice = p.ttsVoice;
     }
+    if (p.alarmVoiceId !== undefined) {
+      if (p.alarmVoiceId !== null && !require('./services/alarmVoices').voices.some(v => v.id === p.alarmVoiceId)) throw invalid('Invalid alarm voice');
+      data.preferences.alarmVoiceId = p.alarmVoiceId;
+    }
   }
   if (input.goals !== undefined) data.preferences.goals = strings(input.goals, 'goals');
   if (!data.supportEnabled) { data.supportConditions = []; data.usageMode = 'standard'; }

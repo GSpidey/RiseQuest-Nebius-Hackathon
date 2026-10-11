@@ -2385,6 +2385,7 @@ app.get('/api/weather/current', async (req, res) => {
 
 // Existing wake-up API, with safety checks and atomic, idempotent point debits.
 require('./src/services/wakeupMessage').registerWakeupRoute(app, { prisma, requireAuth, generateGeminiText });
+require('./src/services/alarmSpeech').registerAlarmSpeech(app, { prisma, requireAuth, uploadsDir });
 
 // TTS: synthesize speech audio with server-side caching (cross-user)
 // NOTE: This is OPTIONAL. If not configured, clients should fall back to on-device TTS.
