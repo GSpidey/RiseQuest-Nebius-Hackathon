@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MonetizationService } from '../utils/MonetizationService';
 import { useStripePayments } from '../services/StripePaymentService';
 import StripePaymentService from '../services/StripePaymentService';
@@ -62,9 +62,9 @@ export default function PremiumUpgradeModal({ visible, onClose, source = 'genera
     const messages = {
       locked_mini_game: '🎮 Unlock all mini-games and take your morning challenges to the next level!',
       streak_protection: '🔥 Protect your amazing streak and unlock unlimited tracking!',
-      missed_alarm: '🚨 Never oversleep again with emergency backup alerts!',
+      missed_alarm: 'Explore more options for your wake-up routine.',
       weather: '🌤️ Get complete weather insights for perfect wake-up timing!',
-      trial_expired: '⏰ Your trial was amazing! Continue the journey with Premium.',
+      trial_expired: 'Your trial has ended. Choose a plan if you would like to keep Premium.',
       general: '👑 Upgrade to Premium and transform your mornings!',
       header: '👑 Upgrade to Premium and transform your mornings!',
       wallet: '👑 Upgrade to Premium and transform your mornings!',
@@ -183,7 +183,7 @@ export default function PremiumUpgradeModal({ visible, onClose, source = 'genera
       ? [{ icon: '👨‍👩‍👧‍👦', text: 'Family plan access', highlight: true }]
       : []),
     { icon: '🎮', text: 'All mini-games unlocked', highlight: true },
-    { icon: '🚨', text: 'Emergency backup alerts', highlight: true },
+    { icon: '📞', text: 'Wake-up support tools', highlight: true },
     { icon: '🚫', text: 'Ad‑free experience', highlight: false },
     { icon: '⚡', text: 'Priority support', highlight: false },
   ];
@@ -195,11 +195,11 @@ export default function PremiumUpgradeModal({ visible, onClose, source = 'genera
       presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
       onRequestClose={onClose}
     >
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <SafeAreaProvider><SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <LinearGradient colors={['#667eea', '#764ba2']} style={styles.container}>
           <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
-            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close plan options" style={styles.closeButton} onPress={onClose}>
               <Text style={styles.closeButtonText}>✕</Text>
             </TouchableOpacity>
             <Text style={styles.title}>{tierCopy.title}</Text>
@@ -263,7 +263,7 @@ export default function PremiumUpgradeModal({ visible, onClose, source = 'genera
               >
                 {plan.popular && (
                   <View style={styles.popularBadge} pointerEvents="none">
-                    <Text style={styles.popularBadgeText}>🔥 MOST POPULAR</Text>
+                    <Text style={styles.popularBadgeText}>YEARLY PLAN</Text>
                   </View>
                 )}
 
@@ -323,7 +323,7 @@ export default function PremiumUpgradeModal({ visible, onClose, source = 'genera
           </View>
           </ScrollView>
         </LinearGradient>
-      </SafeAreaView>
+      </SafeAreaView></SafeAreaProvider>
     </Modal>
   );
 }
@@ -339,11 +339,9 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   closeButton: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 40,
-    height: 40,
+    alignSelf: 'flex-end',
+    width: 48,
+    height: 48,
     backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 20,
     justifyContent: 'center',

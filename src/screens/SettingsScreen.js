@@ -28,6 +28,9 @@ import { getBackendBaseUrl } from '../config/backendConfig';
 import { MonetizationService } from '../utils/MonetizationService';
 import { pick, types as docTypes } from '@react-native-documents/picker';
 import { clearAccountCaches } from '../services/accountCache';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import ModalHeading from '../components/ModalHeading';
+import { sunrise } from '../components/SunriseUI';
 
 export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms, onSignOut, onUpdateProfile, onSecretAdmin }) {
   const [deletingAccount, setDeletingAccount] = useState(false);
@@ -427,7 +430,6 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
         onUpdateProfile(merged || optimistic);
       }
 
-      Alert.alert('Profile', 'Saved successfully.');
       setShowEditProfileModal(false);
     } catch (e) {
       Alert.alert('Edit Profile', e.message || 'Could not save profile changes.');
@@ -437,16 +439,17 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
   };
 
   const EditProfileModal = () => (
-    <Modal visible={showEditProfileModal} animationType="slide" presentationStyle="pageSheet">
-      <View style={styles.modalContainer}>
+    <Modal visible={showEditProfileModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowEditProfileModal(false)}>
+      <SafeAreaProvider><SafeAreaView style={styles.modalContainer}>
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>✏️ Edit Profile</Text>
-          <TouchableOpacity style={styles.closeButton} onPress={() => setShowEditProfileModal(false)}>
+          <Text style={styles.modalTitle}>Your profile</Text>
+          <TouchableOpacity accessibilityRole="button" style={styles.closeButton} onPress={() => setShowEditProfileModal(false)}>
             <Text style={styles.closeButtonText}>Done</Text>
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
+        <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+          <ModalHeading title="Make it yours" description="Personal details and preferences, all in one place." icon="star" />
           {!editProfile ? null : (
             <>
               <Text style={styles.editSectionTitle}>Profile Media</Text>
@@ -485,6 +488,7 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
                 onChangeText={(t) => setEditProfile(prev => ({ ...prev, displayName: t }))}
                 style={styles.editInput}
                 placeholder="Your name"
+                accessibilityLabel="Display name"
               />
 
               <Text style={styles.editLabel}>Phone number (optional)</Text>
@@ -493,6 +497,7 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
                 onChangeText={(t) => setEditProfile(prev => ({ ...prev, phoneNumber: t }))}
                 style={styles.editInput}
                 placeholder="+1..."
+                accessibilityLabel="Phone number (optional)"
                 keyboardType="phone-pad"
               />
 
@@ -672,7 +677,7 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
             </>
           )}
         </ScrollView>
-      </View>
+      </SafeAreaView></SafeAreaProvider>
     </Modal>
   );
 
@@ -770,7 +775,6 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
       const newContact = await EmergencyService.addEmergencyContact(contact);
       setEmergencyContacts(prev => [...prev, newContact]);
       setShowContactsList(false);
-      Alert.alert('Success', `${contact.name} added as emergency contact`);
     } catch (error) {
       Alert.alert('Error', 'Could not add emergency contact');
     }
@@ -825,22 +829,22 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
       visible={showEmergencyModal}
       animationType="slide"
       presentationStyle="pageSheet"
+      onRequestClose={() => setShowEmergencyModal(false)}
     >
-      <View style={styles.modalContainer}>
+      <SafeAreaProvider><SafeAreaView style={styles.modalContainer}>
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>🚨 Emergency Contacts</Text>
+          <Text style={styles.modalTitle}>Your contacts</Text>
           <TouchableOpacity
             style={styles.closeButton}
+            accessibilityRole="button"
             onPress={() => setShowEmergencyModal(false)}
           >
             <Text style={styles.closeButtonText}>Done</Text>
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.modalContent}>
-          <Text style={styles.modalDescription}>
-            Emergency contacts will be notified if you miss critical alarms.
-          </Text>
+        <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalBody}>
+          <ModalHeading title="A little backup" description="Choose people you can contact for wake-up support. Messages and calls require your action; they are not sent automatically." icon="community" />
 
           {emergencyContacts.map((contact) => (
             <View key={contact.id} style={styles.contactCard}>
@@ -865,7 +869,7 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
             <Text style={styles.addContactText}>➕ Add Emergency Contact</Text>
           </TouchableOpacity>
         </ScrollView>
-      </View>
+      </SafeAreaView></SafeAreaProvider>
     </Modal>
   );
 
@@ -874,12 +878,14 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
       visible={showContactsList}
       animationType="slide"
       presentationStyle="pageSheet"
+      onRequestClose={() => setShowContactsList(false)}
     >
-      <View style={styles.modalContainer}>
+      <SafeAreaProvider><SafeAreaView style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Select Contact</Text>
           <TouchableOpacity
             style={styles.closeButton}
+            accessibilityRole="button"
             onPress={() => setShowContactsList(false)}
           >
             <Text style={styles.closeButtonText}>Cancel</Text>
@@ -887,6 +893,10 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
         </View>
 
         <FlatList
+          style={styles.modalContent}
+          contentContainerStyle={styles.modalBody}
+          ListHeaderComponent={<ModalHeading title="Who’s in your corner?" description="Choose a contact with a phone number." icon="community" />}
+          ListEmptyComponent={<Text style={styles.modalDescription}>No contacts available. Check contact access in your phone settings, then try again.</Text>}
           data={availableContacts}
           keyExtractor={(item) => String(item.id || item.recordID || item.primaryNumber || Math.random())}
           renderItem={({ item }) => (
@@ -903,7 +913,7 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
             </TouchableOpacity>
           )}
         />
-      </View>
+      </SafeAreaView></SafeAreaProvider>
     </Modal>
   );
 
@@ -1011,7 +1021,7 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
             label="Emergency Backup Stage"
             value={settings.emergencyBackup}
             onValueChange={(value) => updateSetting('emergencyBackup', value)}
-            description="Final stage alerts emergency contacts"
+            description="Open contact options for additional wake-up support"
           />
         </SettingSection>
 
@@ -1311,8 +1321,8 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
         </View>
       </ScrollView>
 
-      <EmergencyContactsModal />
-      <ContactsListModal />
+      {EmergencyContactsModal()}
+      {ContactsListModal()}
     </LinearGradient>
   );
 }
@@ -1543,7 +1553,7 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: sunrise.background,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1555,13 +1565,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   modalTitle: {
+    flex: 1,
+    marginRight: 12,
     fontSize: 20,
     fontWeight: 'bold',
     color: '#2d3748',
   },
   closeButton: {
-    backgroundColor: '#667eea',
-    borderRadius: 8,
+    backgroundColor: '#6544BC',
+    borderRadius: 16,
+    minHeight: 48,
+    justifyContent: 'center',
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
@@ -1571,8 +1585,11 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     flex: 1,
-    padding: 20,
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
   },
+  modalBody: { padding: 20, paddingBottom: 40 },
   modalDescription: {
     fontSize: 16,
     color: '#4a5568',
@@ -1581,7 +1598,7 @@ const styles = StyleSheet.create({
   },
   contactCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 20,
     padding: 15,
     marginBottom: 10,
     flexDirection: 'row',

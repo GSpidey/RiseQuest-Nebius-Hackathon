@@ -28,11 +28,12 @@ import Sound from 'react-native-sound';
 import PushNotification from 'react-native-push-notification';
 import { challengeDifficulty } from '../services/alarmEditing';
 import { createAlarmPreview } from '../services/alarmPreview';
+import ModalHeading from '../components/ModalHeading';
+import { sunrise } from '../components/SunriseUI';
 
 const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBalances }) => {
   const pendingMessageRequest = useRef(null);
   const insets = useSafeAreaInsets();
-  const [formHeight, setFormHeight] = useState(0);
   const [alarmData, setAlarmData] = useState({
     time: '07:00',
     label: 'Wake up',
@@ -446,8 +447,7 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View collapsable={false} style={{ flex: 1 }}
-        onLayout={({ nativeEvent }) => setFormHeight(Math.round(nativeEvent.layout.height))}>
+      <View collapsable={false} style={{ flex: 1 }}>
         <LinearGradient
           colors={['#667eea', '#764ba2']}
           style={styles.header}
@@ -463,7 +463,6 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
         </LinearGradient>
 
         <ScrollView
-          key={`alarm-form-${formHeight}`}
           style={styles.content}
           contentContainerStyle={{ padding: 24, paddingBottom: 32 + (insets.bottom || 0) }}
           keyboardShouldPersistTaps="handled"
@@ -730,13 +729,13 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
           onRequestClose={() => setShowNameLocationModal(false)}
         >
           <View style={styles.modalOverlay}>
-            <View style={styles.nameModalCard}>
-              <Text style={styles.modalTitle}>Save Location</Text>
-              <Text style={styles.nameModalHint}>Give this location a name:</Text>
+            <View style={styles.nameModalCard} accessibilityViewIsModal>
+              <ModalHeading icon="location" title="Make it a familiar place" description="Name this location so it’s easy to choose next time." />
               <TextInput
                 value={newLocationName}
                 onChangeText={setNewLocationName}
                 placeholder="Home"
+                accessibilityLabel="Location name"
                 style={styles.nameModalInput}
                 autoCapitalize="words"
               />
@@ -771,8 +770,8 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
         onRequestClose={() => setShowLocationModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>Choose Location</Text>
+          <View style={styles.modalContainer} accessibilityViewIsModal>
+            <ModalHeading icon="location" title="Your places" description="Choose a saved place or use your current location." />
             
             <ScrollView style={styles.locationList}>
               <TouchableOpacity
@@ -1169,23 +1168,30 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(37,36,56,0.62)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContainer: {
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 20,
+    backgroundColor: sunrise.background,
+    borderRadius: 28,
+    padding: 24,
     width: '90%',
+    maxWidth: 480,
     maxHeight: '80%',
+    borderWidth: 1,
+    borderColor: sunrise.border,
+    elevation: 12,
   },
   nameModalCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 18,
+    backgroundColor: sunrise.background,
+    borderRadius: 28,
+    padding: 24,
     width: '90%',
     maxWidth: 420,
+    borderWidth: 1,
+    borderColor: sunrise.border,
+    elevation: 12,
   },
   nameModalHint: {
     fontSize: 14,
@@ -1227,8 +1233,8 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
   },
   locationOptionSelected: {
-    borderColor: '#667eea',
-    backgroundColor: '#ebf4ff',
+    borderColor: '#6544BC',
+    backgroundColor: sunrise.purpleTint,
   },
   locationOptionText: {
     fontSize: 16,
@@ -1256,8 +1262,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   modalCloseButton: {
-    backgroundColor: '#667eea',
-    borderRadius: 12,
+    backgroundColor: '#6544BC',
+    borderRadius: 16,
     padding: 15,
     alignItems: 'center',
     marginTop: 20,

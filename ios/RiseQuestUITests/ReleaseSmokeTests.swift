@@ -59,7 +59,7 @@ final class ReleaseSmokeTests: XCTestCase {
       questLoadAlert.buttons["OK"].tap()
     }
     tapText("+ Create", app: app)
-    XCTAssertTrue(app.staticTexts["🎯 Create Quest"].waitForExistence(timeout: 10))
+    XCTAssertTrue(app.staticTexts["Create Quest"].firstMatch.waitForExistence(timeout: 10))
     capture("store-06-quest-planning", app: app)
     tapText("Cancel", app: app)
 

@@ -4,6 +4,7 @@
  */
 
 import { sunrise } from './SunriseUI';
+import ModalHeading from './ModalHeading';
 import React, { useState } from 'react';
 import {
   View,
@@ -139,7 +140,7 @@ const CreateQuestModal = ({ visible, onClose, onCreate, userProfile }) => {
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
+    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={handleClose}>
       <SafeAreaView style={styles.container}>
         <KeyboardAvoidingView 
           style={styles.container} 
@@ -148,13 +149,14 @@ const CreateQuestModal = ({ visible, onClose, onCreate, userProfile }) => {
           {/* Header */}
           <LinearGradient colors={[sunrise.orangeTint, '#FFE49A']} style={styles.header}>
             <View style={styles.headerTop}>
-              <TouchableOpacity onPress={handleClose}>
+              <TouchableOpacity onPress={handleClose} accessibilityRole="button" style={styles.cancelButton}>
                 <Text style={styles.headerButton}>Cancel</Text>
               </TouchableOpacity>
-              <Text style={styles.headerTitle}>🎯 Create Quest</Text>
               <TouchableOpacity 
                 onPress={handleCreate}
                 disabled={loading}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: loading, busy: loading }}
                 style={[styles.createButton, loading && styles.createButtonDisabled]}
               >
                 <Text style={styles.createButtonText}>
@@ -162,12 +164,10 @@ const CreateQuestModal = ({ visible, onClose, onCreate, userProfile }) => {
                 </Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.headerSubtitle}>
-              AI will break your quest into manageable steps
-            </Text>
           </LinearGradient>
 
-          <ScrollView style={styles.form} showsVerticalScrollIndicator={false}>
+          <ScrollView style={styles.form} contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
+            <ModalHeading icon="quests" title="Create Quest" description="Turn something you want to do into manageable steps." />
             {/* Quest Title */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>🎯 Quest Title</Text>
@@ -176,6 +176,7 @@ const CreateQuestModal = ({ visible, onClose, onCreate, userProfile }) => {
                 placeholder={getExampleQuests()}
                 placeholderTextColor="#999"
                 value={title}
+                accessibilityLabel="Quest title"
                 onChangeText={setTitle}
                 maxLength={100}
               />
@@ -193,6 +194,7 @@ const CreateQuestModal = ({ visible, onClose, onCreate, userProfile }) => {
                 placeholder="Describe what you want to accomplish, any specific requirements, timeline, or context that would help break this down into steps..."
                 placeholderTextColor="#999"
                 value={description}
+                accessibilityLabel="Quest description"
                 onChangeText={setDescription}
                 multiline
                 numberOfLines={4}
@@ -363,12 +365,12 @@ const CreateQuestModal = ({ visible, onClose, onCreate, userProfile }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: sunrise.background,
   },
   header: {
-    paddingTop: 20,
+    paddingTop: 12,
     paddingHorizontal: 24,
-    paddingBottom: 24,
+    paddingBottom: 0,
   },
   headerTop: {
     flexDirection: 'row',
@@ -381,6 +383,7 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
   },
+  cancelButton: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 12 },
   headerTitle: {
     color: sunrise.ink,
     fontSize: 24,
@@ -388,7 +391,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   createButton: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: '#6544BC',
+    minHeight: 48,
+    justifyContent: 'center',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 25,
@@ -402,7 +407,7 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   createButtonText: {
-    color: sunrise.ink,
+    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
     letterSpacing: 0.3,
@@ -415,10 +420,18 @@ const styles = StyleSheet.create({
   },
   form: {
     flex: 1,
-    padding: 24,
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
   },
+  formContent: { padding: 20, paddingBottom: 40 },
   section: {
-    marginBottom: 32,
+    marginBottom: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: sunrise.border,
+    padding: 16,
   },
   sectionTitle: {
     fontSize: 20,
@@ -451,7 +464,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   textArea: {
-    height: 120,
+    minHeight: 120,
     paddingTop: 16,
     textAlignVertical: 'top',
   },
@@ -469,8 +482,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   categoryButton: {
-    width: '22%',
-    aspectRatio: 1,
+    flexBasis: '40%',
+    flexGrow: 1,
+    minHeight: 88,
+    padding: 10,
     backgroundColor: '#fff',
     borderRadius: 20,
     borderWidth: 2,
@@ -506,11 +521,13 @@ const styles = StyleSheet.create({
   },
   difficultyContainer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     gap: 12,
   },
   difficultyButton: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 140,
     backgroundColor: '#fff',
     borderRadius: 20,
     borderWidth: 2,

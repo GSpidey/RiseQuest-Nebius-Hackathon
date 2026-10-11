@@ -424,7 +424,7 @@ export const MonetizationService = {
       
       pro_tip: {
         title: '💡 Pro Tip',
-        message: 'Premium members wake up 23% more reliably and build stronger habits. Join thousands who upgraded!',
+        message: 'Explore Premium options and choose the plan that fits your routine.',
         buttons: [
           { text: 'Maybe Later', style: 'cancel' },
           { text: 'Join Premium Club 👑', onPress: () => this.showUpgradeModal('pro_tip') }

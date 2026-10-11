@@ -291,6 +291,7 @@ export default function App() {
   const [challengeLockActive, setChallengeLockActive] = useState(false);
   const [challengeGiveUpEnabledAt, setChallengeGiveUpEnabledAt] = useState(0);
   const alarmActionBusyRef = useRef(false);
+  const notificationConfiguredRef = useRef(false);
 
   const [stripePublishableKey, setStripePublishableKey] = useState(null);
 
@@ -481,20 +482,25 @@ export default function App() {
   }, [currentScreen]);
 
   useEffect(() => {
-    if (Platform.OS !== 'ios' || !NativeModules.RiseQuestAlarmAudio || !alarms.length) return;
+    if (!['ios', 'android'].includes(Platform.OS) || !NativeModules.RiseQuestAlarmAudio?.active || !alarms.length) return;
     let live = true;
+    let openingId = null;
     const open = id => {
-      if (!live || !id || String(currentActiveAlarm?.id) === String(id)) return;
-      const alarm = alarms.find(item => String(item.id) === String(id));
-      if (alarm) startAlarmTakeover(alarm, { source: 'ios_alarm' });
+      if (!live || !id || alarmActionBusyRef.current || String(currentActiveAlarm?.id) === String(id) || openingId === String(id)) return;
+      const alarm = alarms.find(item => String(item.id) === String(id) && item.isEnabled !== false);
+      if (alarm) {
+        openingId = String(id);
+        startAlarmTakeover(alarm, { source: `${Platform.OS}_alarm` });
+      }
     };
     const check = () => { if (AppState.currentState === 'active') NativeModules.RiseQuestAlarmAudio.active().then(open).catch(() => {}); };
-    const emitter = new NativeEventEmitter(NativeModules.RiseQuestAlarmAudio);
-    const event = emitter.addListener('risequestAlarmTriggered', body => open(body.alarmId));
+    const event = Platform.OS === 'ios'
+      ? new NativeEventEmitter(NativeModules.RiseQuestAlarmAudio).addListener('risequestAlarmTriggered', body => open(body.alarmId))
+      : null;
     const state = AppState.addEventListener('change', value => { if (value === 'active') check(); });
     const interval = setInterval(check, 2000);
     check();
-    return () => { live = false; event.remove(); state.remove(); clearInterval(interval); };
+    return () => { live = false; event?.remove(); state.remove(); clearInterval(interval); };
   }, [alarms, currentActiveAlarm?.id]);
 
   const ensureAlarmChannel = () => {
@@ -647,13 +653,16 @@ export default function App() {
         },
         onNotification: function (notification) {
           try {
+            if (alarmActionBusyRef.current) return;
             const rawId = notification?.id || notification?.data?.id || notification?.userInfo?.alarmId;
             const alarmId = notification?.userInfo?.alarmId || notification?.data?.alarmId || rawId;
             if (alarmId) {
-              AsyncStorage.setItem('risequest_last_alarm_id', String(alarmId)).catch(() => {});
-              const match = alarms.find(a => String(a.id) === String(alarmId) || String(a.notificationId) === String(rawId));
+              const match = alarms.find(a => a.isEnabled !== false && (String(a.id) === String(alarmId) || String(a.notificationId) === String(rawId)));
               if (match) {
+                AsyncStorage.removeItem('risequest_last_alarm_id').catch(() => {});
                 startAlarmTakeover(match, { source: 'notification', rawId: rawId != null ? String(rawId) : null });
+              } else {
+                AsyncStorage.setItem('risequest_last_alarm_id', String(alarmId)).catch(() => {});
               }
             }
           } catch (_) {
@@ -665,9 +674,11 @@ export default function App() {
           badge: true,
           sound: true,
         },
-        popInitialNotification: true,
+        // Reconfiguring handlers after an edit must not replay the launch alarm.
+        popInitialNotification: !notificationConfiguredRef.current,
         requestPermissions: false,
       });
+      notificationConfiguredRef.current = true;
     } catch (e) {
       console.warn('Push notification configure failed:', e);
     }
@@ -677,10 +688,12 @@ export default function App() {
   useEffect(() => {
     if (!alarms.length) return;
     AsyncStorage.getItem('risequest_last_alarm_id')
-      .then((id) => {
+      .then(async (id) => {
         if (!id) return;
         AsyncStorage.removeItem('risequest_last_alarm_id').catch(() => {});
-        const match = alarms.find(a => String(a.id) === String(id));
+        const activeId = await NativeModules.RiseQuestAlarmAudio?.active?.();
+        if (String(activeId) !== String(id)) return;
+        const match = alarms.find(a => String(a.id) === String(id) && a.isEnabled !== false);
         if (match) {
           startAlarmTakeover(match, { source: 'cold_start' });
         }
@@ -1665,13 +1678,7 @@ export default function App() {
         lastSnoozeAt: new Date().toISOString(),
       });
 
-      // Random chance to show pro tip
-      if (Math.random() < 0.3) {
-        setTimeout(() => {
-          MonetizationService.triggerUpsell('pro_tip');
-        }, 500);
-      }
-      Alert.alert('Snoozed', 'Alarm will ring again in 5 minutes');
+      AccessibilityInfo.announceForAccessibility('Alarm snoozed for 5 minutes.');
     }
   };
 
