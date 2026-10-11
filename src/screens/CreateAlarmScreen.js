@@ -17,6 +17,7 @@ import {
   NativeModules,
   Keyboard,
   AppState,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
@@ -38,6 +39,7 @@ import { resolveAlarmBuddy } from '../services/wakeBuddy';
 const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBalances }) => {
   const pendingMessageRequest = useRef(null);
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const [alarmData, setAlarmData] = useState({
     time: '07:00',
     label: 'Wake up',
@@ -946,9 +948,9 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
       </View>
       <Modal visible={showVoices} transparent animationType="slide" onRequestClose={() => setShowVoices(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(30,22,50,0.55)', justifyContent: 'center', padding: 22 }}>
-          <View style={{ backgroundColor: '#FFF9F2', borderRadius: 28, padding: 22, height: '85%' }}>
-            <ModalHeading icon="sunny" title="Choose your morning voice" description="A small collection of warm, clear voices for a personal start." />
-            <ScrollView style={{ flex: 1 }}>
+          <View style={[styles.voicePickerCard, { height: Math.max(180, windowHeight - insets.top - insets.bottom - 64) }]}>
+            <ScrollView style={styles.voicePickerScroll} contentContainerStyle={{ paddingBottom: 8 }}>
+              <ModalHeading icon="sunny" title="Choose your morning voice" description="A small collection of warm, clear voices for a personal start." />
               {(voiceCatalog?.voices || []).map(voice => <TouchableOpacity key={voice.id} accessibilityRole="radio"
                 accessibilityState={{ checked: alarmData.voiceId === voice.id }}
                 onPress={() => { setAlarmData(previous => ({ ...previous, voiceId: voice.id })); setShowVoices(false); }}
@@ -958,7 +960,7 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
                 <Text style={{ color: '#655E70', marginTop: 5 }}>{voice.description}</Text>
               </TouchableOpacity>)}
             </ScrollView>
-            <TouchableOpacity accessibilityRole="button" style={{ padding: 16, alignItems: 'center' }} onPress={() => setShowVoices(false)}><Text style={styles.aiLinkText}>Done</Text></TouchableOpacity>
+            <TouchableOpacity accessibilityRole="button" style={styles.voicePickerDone} onPress={() => setShowVoices(false)}><Text style={styles.aiLinkText}>Done</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -967,6 +969,9 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
 };
 
 const styles = StyleSheet.create({
+  voicePickerCard: { backgroundColor: '#FFF9F2', borderRadius: 28, padding: 22, overflow: 'hidden', flexShrink: 1 },
+  voicePickerScroll: { flex: 1, minHeight: 0 },
+  voicePickerDone: { padding: 16, alignItems: 'center', flexShrink: 0 },
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
