@@ -18,9 +18,17 @@ OPENAI_TEXT_MODEL=gpt-5-mini
 
 The integration uses the hosted Token Factory API. Provider calls consume your account's credits or paid balance. Keep credentials server-side and use synthetic data for development.
 
+## Android judging build — October 24, 2026
+
+[Download RiseQuest 1.2.3 Build 17](https://github.com/GSpidey/RiseQuest-Nebius-Hackathon/releases/tag/hackathon-build17-20261024). The release includes the exact real-device demo APK, its SHA-256 checksum and a short judging walkthrough. Earlier releases remain available.
+
+Build 17 demonstrates preference onboarding, an AI wake-up message, Sol's conversational task support, confirmation of quest creation, and the saved result in Quest Center. It is separate from the App Store and Play Store releases.
+
+**Source status:** the application/backend source below is the October 11 snapshot (Android version 1.2.0/code 9); it predates the Build 17 companion UI. The attached APK is not claimed to be reproducible from this older snapshot. Updating the public source is an outstanding submission task.
+
 ## Demo
 
-[Watch the product demo](https://youtu.be/bf5hDO70Yp4). The video uses genuine app captures with generated supporting artwork and narration. Store release is separate from this source snapshot.
+[Watch the currently published demo](https://youtu.be/Ngkwk4RFOh0). A new real-device Build 17 video is being prepared; the published video is retained until its replacement is uploaded and verified.
 
 ## Backend setup
 
