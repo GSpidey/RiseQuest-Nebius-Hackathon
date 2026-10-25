@@ -20,15 +20,15 @@ The integration uses the hosted Token Factory API. Provider calls consume your a
 
 ## Android judging build — October 24, 2026
 
-[Download RiseQuest 1.2.3 Build 17](https://github.com/GSpidey/RiseQuest-Nebius-Hackathon/releases/tag/hackathon-build17-20261024). The release includes the exact real-device demo APK, its SHA-256 checksum and a short judging walkthrough. Earlier releases remain available.
+[Download RiseQuest 1.2.4 Build 21](https://github.com/GSpidey/RiseQuest-Nebius-Hackathon/releases/download/hackathon-build21-20261024/RiseQuest-1.2.4-build21.apk). This GitHub Release download has no scheduled expiration. The [release page](https://github.com/GSpidey/RiseQuest-Nebius-Hackathon/releases/tag/hackathon-build21-20261024) includes the checksum and judging walkthrough. Earlier releases remain available.
 
-Build 17 demonstrates preference onboarding, an AI wake-up message, Sol's conversational task support, confirmation of quest creation, and the saved result in Quest Center. It is separate from the App Store and Play Store releases.
+Explore preference onboarding, personal wake-up messages, quests and AI companions. Sol is one of several characters. Build 21 adds voice conversations and a floating companion while using other app screens. Whole-app hands-free navigation is planned for a future update.
 
 **Source status:** the application/backend source below is the October 11 snapshot (Android version 1.2.0/code 9); it predates the Build 17 companion UI. The attached APK is not claimed to be reproducible from this older snapshot. Updating the public source is an outstanding submission task.
 
 ## Demo
 
-[Watch the currently published demo](https://youtu.be/Ngkwk4RFOh0). A new real-device Build 17 video is being prepared; the published video is retained until its replacement is uploaded and verified.
+[Watch the currently published demo](https://youtu.be/Ngkwk4RFOh0). A revised whole-app demonstration includes the problem RiseQuest addresses, onboarding choices, morning tools, companion-supported tasks and Build 21 voice footage. The new cut is under review.
 
 ## Backend setup
 
