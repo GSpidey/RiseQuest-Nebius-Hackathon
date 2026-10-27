@@ -18,17 +18,17 @@ OPENAI_TEXT_MODEL=gpt-5-mini
 
 The integration uses the hosted Token Factory API. Provider calls consume your account's credits or paid balance. Keep credentials server-side and use synthetic data for development.
 
-## Android judging build — October 24, 2026
+## Android judging build — October 27, 2026
 
-[Download RiseQuest 1.2.4 Build 21](https://github.com/GSpidey/RiseQuest-Nebius-Hackathon/releases/download/hackathon-build21-20261024/RiseQuest-1.2.4-build21.apk). This GitHub Release download has no scheduled expiration. The [release page](https://github.com/GSpidey/RiseQuest-Nebius-Hackathon/releases/tag/hackathon-build21-20261024) includes the checksum and judging walkthrough. Earlier releases remain available.
+[Download RiseQuest 1.2.4 Build 22](https://risequest-downloads.goldenepics.com/releases/230642e1d05d8b90b7c8321beff30e121f57eba5/d8a69b0e-7fe0-4356-afad-aa45dc629228/RiseQuest-1.2.4-build22.apk). The signed APK is hosted under our Cloudflare download domain with no scheduled expiration. [Release checksums and artifact details](https://risequest-downloads.goldenepics.com/releases/230642e1d05d8b90b7c8321beff30e121f57eba5/d8a69b0e-7fe0-4356-afad-aa45dc629228/manifest.json).
 
-Explore preference onboarding, personal wake-up messages, quests and AI companions. Sol is one of several characters. Build 21 adds voice conversations and a floating companion while using other app screens. Whole-app hands-free navigation is planned for a future update.
+Explore preference onboarding, personal wake-up messages, quests and AI companions. Companions support text/voice conversations, a floating view, navigation and confirmed alarm, quest and cosmetic actions. The latest build adds time-aware planning, editable quest steps, private notes, paced breaks and Lumen's screen/document reading tools. Each companion card has a clear feature checklist. Profile banners now display, with Notes and Buddy Messages icons at the top.
 
-**Source status:** the application/backend source below is the October 11 snapshot (Android version 1.2.0/code 9); it predates the Build 17 companion UI. The attached APK is not claimed to be reproducible from this older snapshot. Updating the public source is an outstanding submission task.
+**Source status:** the application/backend source below is the October 11 snapshot (Android version 1.2.0/code 9); it predates the current companion and reader release. The APK is not claimed to be reproducible from this older snapshot. Updating the public source remains an outstanding submission task.
 
 ## Demo
 
-[Watch the currently published demo](https://youtu.be/Ngkwk4RFOh0). A revised whole-app demonstration includes the problem RiseQuest addresses, onboarding choices, morning tools, companion-supported tasks and Build 21 voice footage. The new cut is under review.
+[Watch the published demo](https://youtu.be/LWo1uFdglhw), including Sol's companion conversation, a saved quest and its first step.
 
 ## Backend setup
 
