@@ -16,6 +16,12 @@
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+
+    B30000000000000000000001 = {isa = PBXBuildFile; fileRef = B30000000000000000000002; };
+    B30000000000000000000003 = {isa = PBXBuildFile; fileRef = B30000000000000000000004; };
+    B30000000000000000000005 = {isa = PBXBuildFile; fileRef = B30000000000000000000006; };
+    B30000000000000000000007 = {isa = PBXBuildFile; fileRef = B30000000000000000000008; settings = {ATTRIBUTES = (RemoveHeadersOnCopy,);}; };
+
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -33,6 +39,12 @@
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = RiseQuest/AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = RiseQuest/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+
+    B30000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RiseQuest/RiseQuestReader.swift; sourceTree = "<group>"; };
+    B30000000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RiseQuest/RiseQuestReaderBridge.m; sourceTree = "<group>"; };
+    B30000000000000000000006 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RiseQuestReaderBroadcast/SampleHandler.swift; sourceTree = "<group>"; };
+    B30000000000000000000008 = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RiseQuestReader.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -46,11 +58,23 @@
 		};
 /* End PBXFrameworksBuildPhase section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+    B30000000000000000000009 = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = (B30000000000000000000007,); name = "Embed App Extensions"; runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXCopyFilesBuildPhase section */
+/* Begin PBXContainerItemProxy section */
+    B3000000000000000000000A = {isa = PBXContainerItemProxy; containerPortal = 83CBB9F71A601CBA00E9B192; proxyType = 1; remoteGlobalIDString = B3000000000000000000000B; remoteInfo = RiseQuestReader; };
+/* End PBXContainerItemProxy section */
+/* Begin PBXTargetDependency section */
+    B3000000000000000000000C = {isa = PBXTargetDependency; target = B3000000000000000000000B; targetProxy = B3000000000000000000000A; };
+/* End PBXTargetDependency section */
 /* Begin PBXGroup section */
 		13B07FAE1A68108700A75B9A /* RiseQuest */ = {
 			isa = PBXGroup;
 			children = (
-				A10000000000000000000002,
+				B30000000000000000000002,
+                B30000000000000000000004,
+                B30000000000000000000006,
+                A10000000000000000000002,
 				A20000000000000000000002,
 				A20000000000000000000004,
 				A10000000000000000000004,
@@ -97,6 +121,7 @@
 			isa = PBXGroup;
 			children = (
 				13B07F961A680F5B00A75B9A /* RiseQuest.app */,
+                B30000000000000000000008,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -119,6 +144,7 @@
 			buildPhases = (
 				C38B50BA6285516D6DCD4F65 /* [CP] Check Pods Manifest.lock */,
 				13B07F871A680F5B00A75B9A /* Sources */,
+                B30000000000000000000009,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
@@ -127,13 +153,15 @@
 			);
 			buildRules = (
 			);
-			dependencies = (
-			);
+			dependencies = (B3000000000000000000000C,);
 			name = RiseQuest;
 			productName = RiseQuest;
 			productReference = 13B07F961A680F5B00A75B9A /* RiseQuest.app */;
 			productType = "com.apple.product-type.application";
 		};
+
+    B3000000000000000000000B = {isa = PBXNativeTarget; buildConfigurationList = B3000000000000000000000D; buildPhases = (B3000000000000000000000E,); buildRules = (); dependencies = (); name = RiseQuestReader; productName = RiseQuestReader; productReference = B30000000000000000000008; productType = "com.apple.product-type.app-extension"; };
+
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -160,6 +188,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+                B3000000000000000000000B,
 				13B07F861A680F5B00A75B9A /* RiseQuest */,
 			);
 		};
@@ -258,6 +287,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                B30000000000000000000001,
+                B30000000000000000000003,
 				A10000000000000000000001,
 				A20000000000000000000001,
 				A20000000000000000000003,
@@ -266,6 +297,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+    B3000000000000000000000E = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B30000000000000000000005,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
@@ -275,7 +307,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 20;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = RiseQuest/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -283,14 +315,14 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2.0;
+				MARKETING_VERSION = 1.2.4;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.goldenepics.risequest;
-				DEVELOPMENT_TEAM = 928X72628Q;
+				DEVELOPMENT_TEAM = "";
 				CODE_SIGN_ENTITLEMENTS = RiseQuest/RiseQuest.entitlements;
 				SWIFT_OBJC_BRIDGING_HEADER = "RiseQuest/RiseQuest-Bridging-Header.h";
 				PRODUCT_NAME = RiseQuest;
@@ -306,21 +338,21 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 20;
 				INFOPLIST_FILE = RiseQuest/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2.0;
+				MARKETING_VERSION = 1.2.4;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.goldenepics.risequest;
-				DEVELOPMENT_TEAM = 928X72628Q;
+				DEVELOPMENT_TEAM = "";
 				CODE_SIGN_ENTITLEMENTS = RiseQuest/RiseQuest.entitlements;
 				SWIFT_OBJC_BRIDGING_HEADER = "RiseQuest/RiseQuest-Bridging-Header.h";
 				PRODUCT_NAME = RiseQuest;
@@ -468,6 +500,22 @@
 			};
 			name = Release;
 		};
+    B3000000000000000000000F = {isa = XCBuildConfiguration; buildSettings = {
+      APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_ENTITLEMENTS = RiseQuestReaderBroadcast/Reader.entitlements;
+      CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; CURRENT_PROJECT_VERSION = 20; MARKETING_VERSION = 1.2.4;
+      INFOPLIST_FILE = RiseQuestReaderBroadcast/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+      PRODUCT_BUNDLE_IDENTIFIER = com.goldenepics.risequest.reader; PRODUCT_NAME = "$(TARGET_NAME)";
+      SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2";
+      LD_RUNPATH_SEARCH_PATHS = ("$(inherited)","@executable_path/Frameworks","@executable_path/../../Frameworks");
+    }; name = Debug; };
+    B30000000000000000000010 = {isa = XCBuildConfiguration; buildSettings = {
+      APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_ENTITLEMENTS = RiseQuestReaderBroadcast/Reader.entitlements;
+      CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; CURRENT_PROJECT_VERSION = 20; MARKETING_VERSION = 1.2.4;
+      INFOPLIST_FILE = RiseQuestReaderBroadcast/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+      PRODUCT_BUNDLE_IDENTIFIER = com.goldenepics.risequest.reader; PRODUCT_NAME = "$(TARGET_NAME)";
+      SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2";
+      LD_RUNPATH_SEARCH_PATHS = ("$(inherited)","@executable_path/Frameworks","@executable_path/../../Frameworks");
+    }; name = Release; };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -489,7 +537,10 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+    B3000000000000000000000D = {isa = XCConfigurationList; buildConfigurations = (B3000000000000000000000F,B30000000000000000000010,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 	};
 	rootObject = 83CBB9F71A601CBA00E9B192 /* Project object */;
 }
+
+

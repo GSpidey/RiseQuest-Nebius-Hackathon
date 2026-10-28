@@ -1,7 +1,7 @@
+import { AppAlert as Alert } from '../services/dialogQueue';
 import { getAuthToken } from '../services/AuthTokenStorage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert } from 'react-native';
-import { GoogleLocationService } from '../services/GoogleLocationService';
+
 import { getBackendBaseUrl } from '../config/backendConfig';
 import riseQuestWalletService from '../services/RiseQuestWalletService';
 import { createSubscriptionRepository } from '../services/subscriptionRepository';
@@ -141,51 +141,15 @@ export const MonetizationService = {
     return subscriptions.get(options);
   },
 
-  // Detect user region for localized pricing using Google Location Service
+  // Regional display defaults never require GPS; store checkout supplies its own localized price.
   async detectUserRegion() {
     try {
-      // Use existing Google Location Service to get country
-      const locationData = await GoogleLocationService.getCurrentLocation();
-      
-      if (locationData && locationData.address && locationData.address.country) {
-        const country = locationData.address.country;
-        
-        // Map country names to pricing regions
-        const countryToRegionMap = {
-          'United States': 'US',
-          'Canada': 'CA',
-          'United Kingdom': 'GB',
-          'Australia': 'AU',
-          'India': 'IN',
-          'Brazil': 'BR',
-          // EU countries
-          'Germany': 'EU',
-          'France': 'EU',
-          'Italy': 'EU',
-          'Spain': 'EU',
-          'Netherlands': 'EU',
-          'Belgium': 'EU',
-          'Austria': 'EU',
-          'Finland': 'EU',
-          'Sweden': 'EU',
-          'Denmark': 'EU',
-          'Norway': 'EU',
-          'Poland': 'EU'
-        };
-        
-        const region = countryToRegionMap[country] || 'DEFAULT';
-        console.log(`🌍 Detected region: ${region} (Country: ${country})`);
-        return region;
-      }
-
-      // Fallback to device locale if location fails
-      console.log('📍 Location detection failed, using device locale fallback');
-      return 'DEFAULT';
-      
-    } catch (error) {
-      console.error('Region detection failed:', error);
-      return 'DEFAULT';
-    }
+      const locale = Intl.DateTimeFormat().resolvedOptions().locale;
+      const region = locale.split(/[-_]/).find(part => /^[A-Z]{2}$/.test(part)) || 'DEFAULT';
+      if (this.PRICING[region]) return region;
+      if (['DE','FR','IT','ES','NL','BE','AT','FI','SE','DK','PL','IE','PT','GR'].includes(region)) return 'EU';
+    } catch (_) {}
+    return 'DEFAULT';
   },
 
   // Get localized pricing for user's region
@@ -244,17 +208,11 @@ export const MonetizationService = {
     const subscription = await this.getUserSubscription();
     
     if (subscription.trialUsed) {
-      Alert.alert('Trial Already Used', 'You have already used your free trial. Upgrade to Premium to continue enjoying all features!');
-      return false;
+      throw new Error('Your free trial has already been used. Choose a subscription if you would like Premium.');
     }
 
     const trialData = await subscriptions.startTrial();
     if (trialData.tier !== this.TIERS.TRIAL) return false;
-    
-    Alert.alert(
-      '🎉 7-Day Premium Trial Started!',
-      'Enjoy Premium for 7 days. No payment method is needed and this trial does not renew or charge you.'
-    );
     
     return true;
   },
@@ -340,10 +298,7 @@ export const MonetizationService = {
       }
     }
 
-    // Anonymous/local-only fallback.
-    const newPoints = (subscription.risePoints || 0) + points;
-    await this.updateUserSubscription({ ...subscription, risePoints: newPoints });
-    return newPoints;
+    return Number(subscription.risePoints || 0);
   },
 
   async spendRisePoints(points, item, metadata = {}) {
@@ -464,20 +419,10 @@ export const MonetizationService = {
 
   // Gamification rewards
   RISE_POINT_REWARDS: {
-    DAILY_WAKEUP: 10,
-    STREAK_MILESTONE: 50,
-    CHALLENGE_COMPLETED: 25,
-    PERFECT_WEEK: 100,
-    EARLY_WAKEUP: 15,
-    NO_SNOOZE: 20,
-    // Quest System Rewards
-    QUEST_CREATED: 15,
-    QUEST_STEP_COMPLETED: 5,
-    QUEST_COMPLETED: 50,
-    QUEST_FOCUS_SESSION: 10,
-    QUEST_STREAK_3: 25,
-    QUEST_STREAK_7: 75,
-    QUEST_PERFECT_EXECUTION: 100,
+    DAILY_WAKEUP: 3, STREAK_MILESTONE: 10, CHALLENGE_COMPLETED: 2,
+    PERFECT_WEEK: 0, EARLY_WAKEUP: 0, NO_SNOOZE: 0,
+    QUEST_CREATED: 1, QUEST_STEP_COMPLETED: 1, QUEST_COMPLETED: 3,
+    QUEST_FOCUS_SESSION: 0, QUEST_STREAK_3: 0, QUEST_STREAK_7: 0, QUEST_PERFECT_WEEK: 0,
   },
 
   UNLOCKABLE_REWARDS: {
@@ -489,7 +434,7 @@ export const MonetizationService = {
 
   // Free tier limitations
   FREE_LIMITS: {
-    MINI_GAMES: 1, // Only math game
+    MINI_GAMES: 6, // Only math game
     STREAK_TRACKING_DAYS: 7,
     WEATHER_DAYS: 1, // Today only
     SNOOZE_CHALLENGES: 1, // Basic difficulty only
@@ -529,23 +474,6 @@ export const MonetizationService = {
     
     // In real app, send to analytics service
     console.log('Upsell Analytics:', analytics);
-  },
-
-  // Launch funnel
-  async initializeNewUser() {
-    const subscription = await this.getUserSubscription();
-    
-    if (!subscription.trialUsed) {
-      // Show onboarding with trial offer
-      Alert.alert(
-        '🎉 Welcome to RiseQuest!',
-        'Start your journey with a FREE 7-day Premium trial. Experience all features and build better morning habits!',
-        [
-          { text: 'Start Free Version', style: 'cancel' },
-          { text: 'Start FREE Trial 🎁', onPress: () => this.startFreeTrial() }
-        ]
-      );
-    }
   },
 
   // Ad management for free users
@@ -657,30 +585,9 @@ export const MonetizationService = {
     }
   },
 
-  async awardRisePoints(points, reason) {
-    try {
-      const subscription = await this.getUserSubscription();
-      subscription.risePoints = (subscription.risePoints || 0) + points;
-      
-      await subscriptions.update(subscription);
-      
-      // Log the transaction
-      const transaction = {
-        type: 'rise_points_award',
-        amount: points,
-        reason,
-        timestamp: Date.now(),
-        balance: subscription.risePoints
-      };
-      
-      const transactions = await AsyncStorage.getItem('risePointsTransactions');
-      const history = transactions ? JSON.parse(transactions) : [];
-      history.push(transaction);
-      
-      await AsyncStorage.setItem('risePointsTransactions', JSON.stringify(history));
-    } catch (error) {
-      console.error('Error awarding Rise Points:', error);
-    }
+  async awardRisePoints(points, reason, metadata = {}) {
+    // Every signed-in award must be verified by the same server ledger.
+    return this.addRisePoints(points, reason, metadata);
   },
 
   async processCosmericPayment(paymentData) {
@@ -693,3 +600,4 @@ export const MonetizationService = {
     return false;
   }
 };
+

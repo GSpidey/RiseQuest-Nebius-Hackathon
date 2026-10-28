@@ -1,11 +1,13 @@
 process.env.NODE_ENV = 'test';
-process.env.AUTH_JWT_SECRET = 'route-tests-only';
+process.env.AUTH_JWT_SECRET = 'route-tests-only-synthetic-secret-32-chars';
 process.env.STRIPE_SECRET_KEY = 'sk_test_no_external_calls';
 const mockPrisma = {
   user: { findUnique: jest.fn() }, quest: { findUnique: jest.fn(), findMany: jest.fn() },
   subscription: { findUnique: jest.fn(), findMany: jest.fn() }, stripeWebhookEvent: { findUnique: jest.fn(), upsert: jest.fn() },
   userProfile: { findUnique: jest.fn(), create: jest.fn(), updateMany: jest.fn() },
   storePurchase: { findMany: jest.fn().mockResolvedValue([]) },
+  risePointsTransaction: { findUnique: jest.fn().mockResolvedValue(null) },
+  $executeRaw: jest.fn().mockResolvedValue(1),
   $transaction: jest.fn(fn => fn(mockPrisma)),
 };
 jest.mock('../src/prisma', () => ({ getPrisma: () => mockPrisma }));

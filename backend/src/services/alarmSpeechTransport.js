@@ -2,10 +2,9 @@
 // disclosed cost, idempotency and ownership before invoking this adapter.
 const SAMPLE_RATE = 24000;
 const MAX_SECONDS = 25;
-const MAX_BYTES = SAMPLE_RATE * 4 * MAX_SECONDS;
 
-function pcmToWav(raw) {
-  if (!raw.length || raw.length % 4 || raw.length > MAX_BYTES)
+function pcmToWav(raw, maxSeconds = MAX_SECONDS) {
+  if (!raw.length || raw.length % 4 || raw.length > SAMPLE_RATE * 4 * maxSeconds)
     throw Error('Invalid speech audio');
   const frames = raw.length / 4;
   const wav = Buffer.alloc(44 + frames * 2);
@@ -25,14 +24,15 @@ function pcmToWav(raw) {
 }
 
 async function synthesizeAlarmSpeech({ text, voiceId, allowedVoiceIds, apiKey,
-  request = fetch }) {
-  if (typeof text !== 'string' || !text.trim() || text.length > 240 || /[<>]/.test(text))
-    throw Error('Use a plain-text message of 1–240 characters.');
+  request = fetch, maxCharacters = 240, maxSeconds = MAX_SECONDS, timeoutMs = 20000 }) {
+  if (typeof text !== 'string' || !text.trim() || text.length > maxCharacters || /[<>]/.test(text))
+    throw Error(`Use a plain-text message of 1–${maxCharacters} characters.`);
   if (!Array.isArray(allowedVoiceIds) || !allowedVoiceIds.includes(voiceId))
     throw Error('Choose an available voice.');
   if (!apiKey) throw Error('Speech generation is not configured.');
+  const maxBytes = SAMPLE_RATE * 4 * maxSeconds;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   let reader;
   try {
     const response = await request('https://api.async.com/text_to_speech', {
@@ -43,20 +43,22 @@ async function synthesizeAlarmSpeech({ text, voiceId, allowedVoiceIds, apiKey,
         output_format: { container: 'raw', encoding: 'pcm_f32le', sample_rate: SAMPLE_RATE } }),
     });
     // Never echo upstream response bodies: they may contain text or credentials.
-    if (!response.ok || !response.body) throw Error('Speech generation is temporarily unavailable.');
+    if (!response.ok || !response.body) throw Object.assign(Error('Speech generation is temporarily unavailable.'), {
+      code: 'ASYNC_RESPONSE_ERROR', upstreamStatus: response.status,
+    });
     if (/json|text\//i.test(response.headers.get('content-type') || '')) throw Error('Invalid speech audio');
     const declared = Number(response.headers.get('content-length'));
-    if (declared > MAX_BYTES) throw Error('Speech message is too long.');
+    if (declared > maxBytes) throw Error('Speech message is too long.');
     reader = response.body.getReader();
     const chunks = []; let size = 0;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > MAX_BYTES) throw Error('Speech message is too long.');
+      if (size > maxBytes) throw Error('Speech message is too long.');
       chunks.push(Buffer.from(value));
     }
-    return pcmToWav(Buffer.concat(chunks));
+    return pcmToWav(Buffer.concat(chunks), maxSeconds);
   } finally {
     clearTimeout(timeout);
     if (reader) await reader.cancel().catch(() => {});
@@ -65,3 +67,4 @@ async function synthesizeAlarmSpeech({ text, voiceId, allowedVoiceIds, apiKey,
 }
 
 module.exports = { synthesizeAlarmSpeech, pcmToWav, SAMPLE_RATE, MAX_SECONDS };
+

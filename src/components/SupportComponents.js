@@ -1,17 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  SafeAreaView,
-  Dimensions,
-  Animated,
-  Modal,
-  TextInput,
-  Alert,
-} from 'react-native';
+import {moodStorageKey} from '../features/companion/supportClient';
+import Modal, { AppAlert as Alert } from './AppModal';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView, Dimensions, Animated, TextInput } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { UserProfileService } from '../models/RiseQuestModels';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -22,6 +12,8 @@ const { width, height } = Dimensions.get('window');
  * Enhanced Mood & Energy Logger with ADHD/Bipolar Support
  */
 const MoodTracker = ({ userProfile, onMoodLogged }) => {
+  const moodKey=moodStorageKey(userProfile?.id||userProfile?.email);
+  const activeMoodKey=useRef(moodKey);activeMoodKey.current=moodKey;
   const [selectedMood, setSelectedMood] = useState(null);
   const [selectedEnergy, setSelectedEnergy] = useState(null);
   const [selectedFocus, setSelectedFocus] = useState(null);
@@ -60,13 +52,13 @@ const MoodTracker = ({ userProfile, onMoodLogged }) => {
   ];
 
   useEffect(() => {
-    loadMoodHistory();
-  }, []);
+    setMoodHistory([]);loadMoodHistory();
+  }, [moodKey]);
 
   const loadMoodHistory = async () => {
     try {
-      const history = await AsyncStorage.getItem('mood_history');
-      if (history) {
+      const history = await AsyncStorage.getItem(moodKey);
+      if (history && activeMoodKey.current===moodKey) {
         setMoodHistory(JSON.parse(history));
       }
     } catch (error) {
@@ -93,7 +85,7 @@ const MoodTracker = ({ userProfile, onMoodLogged }) => {
         contextTags: [] // Could include sleep quality, medication, weather, etc.
       };
 
-      const currentHistory = await AsyncStorage.getItem('mood_history');
+      const currentHistory = await AsyncStorage.getItem(moodKey);
       const history = currentHistory ? JSON.parse(currentHistory) : [];
       history.unshift(entry); // Add to beginning
 
@@ -104,8 +96,9 @@ const MoodTracker = ({ userProfile, onMoodLogged }) => {
         new Date(h.timestamp) > ninetyDaysAgo
       );
 
-      await AsyncStorage.setItem('mood_history', JSON.stringify(filteredHistory));
+      await AsyncStorage.setItem(moodKey, JSON.stringify(filteredHistory));
       
+      if(activeMoodKey.current!==moodKey)return;
       // Reset form
       setSelectedMood(null);
       setSelectedEnergy(null);
@@ -898,3 +891,4 @@ const styles = StyleSheet.create({
 });
 
 export { MoodTracker, FocusTimer };
+

@@ -48,7 +48,7 @@ test('only successful matching owner payments fulfill points', () => {
 });
 test('daily reward receipt is stable, bounded and account scoped', async () => {
   const a = await rewardFor({}, 'owner', 'Daily login bonus'), b = await rewardFor({}, 'owner', 'Daily login bonus');
-  expect(a).toEqual(b); expect(a.amount).toBe(10);
+  expect(a).toEqual(b); expect(a.amount).toBe(2);
   expect((await rewardFor({}, 'other', 'Daily login bonus')).id).not.toBe(a.id);
 });
 test('quest rewards require ownership and completed steps', async () => {

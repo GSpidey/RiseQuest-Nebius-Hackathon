@@ -1,17 +1,8 @@
+import ModalHeading from './components/ModalHeading';
+import Modal, { AppAlert as Alert } from './components/AppModal';
 import { getAuthToken } from './services/AuthTokenStorage';
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Modal,
-  TextInput,
-  Alert,
-  Switch,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Switch, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LinearGradient from 'react-native-linear-gradient';
 import ImprovementSuggestions from './ImprovementSuggestions';
@@ -252,7 +243,7 @@ const AdminPanel = ({
       <Text style={styles.sectionTitle}>🎧 Support Tickets</Text>
       
       <View style={styles.supportHeader}>
-        <Text style={styles.supportEmail}>Support Email: Risequestsupport@goldenepics.com</Text>
+        <Text style={styles.supportEmail}>Support Email: support@example.invalid</Text>
         <TouchableOpacity style={styles.refreshButton} onPress={refreshAll}>
           <Text style={styles.refreshButtonText}>Refresh</Text>
         </TouchableOpacity>
@@ -489,10 +480,10 @@ const AdminPanel = ({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
+    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
       <LinearGradient colors={['#667eea', '#764ba2']} style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>🔧 RiseQuest Admin Panel</Text>
+          <ModalHeading compact light title="RiseQuest Admin Panel" icon="shield"/>
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
             <Text style={styles.closeButtonText}>✕</Text>
           </TouchableOpacity>
@@ -856,3 +847,4 @@ const styles = StyleSheet.create({
 });
 
 export default AdminPanel;
+

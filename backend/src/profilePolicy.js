@@ -1,3 +1,5 @@
+const { walletTransaction } = require('./security');
+const { grantWelcome } = require('./welcome');
 // Only preferences belong here. Roles, purchases, points and parent approvals
 // are server-owned and must never be accepted from a mobile profile payload.
 const { validCountry, requiresParent } = require('./agePolicy');
@@ -13,7 +15,7 @@ const preferenceChoices = {
   ttsMode: ['device', 'cloud'],
   communityVisibility: ['buddies', 'public'],
 };
-const preferenceBooleans = ['reducedSensory', 'captionsEnabled', 'ttsEnabled',
+const preferenceBooleans = ['untimedChallenges', 'reducedSensory', 'captionsEnabled', 'ttsEnabled',
   'dyslexiaFriendly', 'dataMinimization', 'communityOptIn', 'communityTeenSafety', 'analyticsOptIn', 'optionalInlineAds'];
 const invalid = message => Object.assign(new Error(message), { status: 400 });
 function select(value, allowed, name) {
@@ -45,6 +47,14 @@ function sanitizeProfile(input, existing = {}) {
     if (!validCountry(input.countryCode)) throw invalid('Select a country');
     if (existing.ageGroup !== 'adult' && existing.countryCode && existing.countryCode !== input.countryCode) throw invalid('A parent or support review is needed to correct the country for a minor.');
     data.countryCode = input.countryCode;
+  }
+  if(input.sleepSettings!==undefined){
+    if(!input.sleepSettings||typeof input.sleepSettings!=='object'||Array.isArray(input.sleepSettings))throw invalid('Invalid sleep settings');
+    data.sleepSettings={...existing.sleepSettings};
+    for(const key of ['movementTracking','smartWakeUp','reminders'])if(input.sleepSettings[key]!==undefined){
+      if(typeof input.sleepSettings[key]!=='boolean')throw invalid('Invalid sleep setting');
+      data.sleepSettings[key]=input.sleepSettings[key];
+    }
   }
   if (input.preferences !== undefined) {
     if (!input.preferences || typeof input.preferences !== 'object' || Array.isArray(input.preferences)) throw invalid('Invalid preferences');
@@ -108,12 +118,17 @@ function registerProfileRoutes(app, { prisma, requireAuth }) {
       if (data.ageGroup === 'child' || (data.ageGroup === 'teen' && requiresParent(data.ageBand, data.countryCode))) return res.status(403).json({ error: 'A verified parent must manage this profile for this age and region', code: 'PARENT_REQUIRED' });
       const complete = req.body.complete === true;
       if (complete && !data.ageGroup) throw invalid('Select an age group');
-      const saved = await prisma.$transaction(async tx => {
-        if (!current) return tx.userProfile.create({ data: { userId: req.auth.userId, data, completedAt: complete ? new Date() : null } });
+      const saved = await walletTransaction(prisma, req.auth.userId, async tx => {
+        if (!current) {
+          const created = await tx.userProfile.create({ data: { userId: req.auth.userId, data, completedAt: complete ? new Date() : null } });
+          if (complete) await grantWelcome(tx, req.auth.userId);
+          return created;
+        }
         const changed = await tx.userProfile.updateMany({ where: { userId: req.auth.userId, version: req.body.version }, data: {
           data, version: { increment: 1 }, ...(complete && !current.completedAt ? { completedAt: new Date() } : {}),
         } });
         if (!changed.count) throw Object.assign(new Error('Preferences changed. Reload and try again.'), { status: 409 });
+        if (complete) await grantWelcome(tx, req.auth.userId);
         return tx.userProfile.findUnique({ where: { userId: req.auth.userId } });
       });
       res.json({ profile: publicProfile(saved) });

@@ -23,8 +23,6 @@ async function generateWakeup({ prisma, userId, input, key, generateGeminiText, 
   const id = `ai_wakeup_${digest(`${userId}|${key || crypto.randomUUID()}`)}`;
   const existing = replay(await prisma.risePointsTransaction.findUnique({ where: { id } }), requestHash);
   if (existing) return existing;
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return fallback();
   const cost = Math.max(1, Math.min(500, Number(process.env.AI_WAKEUP_MESSAGE_COST) || 25));
   const balance = (await prisma.risePointsBalance.findUnique({ where: { userId } }))?.balance || 0;
   if (balance < cost) throw Object.assign(Error('Insufficient RisePoints'), { status: 400, balance, cost });

@@ -10,7 +10,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "email:test": "node scripts/smtp_test.js",
-    "admin:seed": "node scripts/seed_admin_user.js"
+    "admin:seed": "node scripts/seed_admin_user.js",
+    "test:recharge": "node ../tests/recharge.integration.cjs"
   },
   "dependencies": {
     "@apple/app-store-server-library": "3.1.0",
@@ -26,16 +27,22 @@
     "multer": "^2.3.0",
     "nodemailer": "^10.0.1",
     "sharp": "^0.35.4",
-    "stripe": "^14.5.0"
+    "stripe": "^14.5.0",
+    "stripe-recharge": "npm:stripe@22.6.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.12",
+    "@electric-sql/pglite-socket": "0.2.15",
     "jest": "^29.7.0",
     "nodemon": "^3.0.2",
     "prisma": "^6.5.0"
   },
   "overrides": {
     "qs": "6.16.0",
-    "@prisma/config": { "deepmerge-ts": "8.0.0", "effect": "^3.20.0" }
+    "@prisma/config": {
+      "deepmerge-ts": "8.0.0",
+      "effect": "^3.20.0"
+    }
   },
   "engines": {
     "node": ">=18.0.0"

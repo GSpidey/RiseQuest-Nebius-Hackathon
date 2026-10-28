@@ -1,5 +1,6 @@
+import { AppAlert as Alert } from '../services/dialogQueue';
 import { authHeaders } from './AuthTokenStorage';
-import { Alert } from 'react-native';
+
 import { useStripe, initStripe } from '@stripe/stripe-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getBackendBaseUrl } from '../config/backendConfig';
@@ -14,7 +15,7 @@ async function prepareStripe(publishableKey) {
 
 class StripePaymentService {
   constructor() {
-    this.supportEmail = 'Risequestsupport@goldenepics.com';
+    this.supportEmail = 'support@example.invalid';
     this.isInitialized = false;
   }
 
@@ -225,7 +226,7 @@ export const useStripePayments = () => {
       console.error('Subscription payment failed:', error);
       Alert.alert(
         'Payment Failed',
-        `${error.message}\n\nPlease contact support: Risequestsupport@goldenepics.com`
+        `${error.message}\n\nPlease contact support: support@example.invalid`
       );
       return { success: false, error: error.message };
     }
@@ -313,7 +314,7 @@ export const useStripePayments = () => {
       console.error('RisePoints purchase failed:', error);
       Alert.alert(
         'Purchase Failed',
-        `${error.message}\n\nPlease contact support: Risequestsupport@goldenepics.com`
+        `${error.message}\n\nPlease contact support: support@example.invalid`
       );
       return { success: false, error: error.message };
     }
@@ -357,7 +358,7 @@ export const useStripePayments = () => {
       return { success: true, paymentIntentId: payload.paymentIntentId };
     } catch (error) {
       console.error('One-time payment failed:', error);
-      Alert.alert('Payment Failed', `${error.message}\n\nPlease contact support: Risequestsupport@goldenepics.com`);
+      Alert.alert('Payment Failed', `${error.message}\n\nPlease contact support: support@example.invalid`);
       return { success: false, error: error.message };
     }
   };
@@ -370,3 +371,4 @@ export const useStripePayments = () => {
 };
 
 export default new StripePaymentService();
+

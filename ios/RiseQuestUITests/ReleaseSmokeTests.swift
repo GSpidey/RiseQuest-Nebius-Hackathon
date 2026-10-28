@@ -26,6 +26,19 @@ final class ReleaseSmokeTests: XCTestCase {
     tab.tap()
   }
 
+  private func enterText(_ text: String, in element: XCUIElement) {
+    element.tap()
+    // Wait for each controlled-input update before injecting the next key.
+    // A single fast typeText call reordered characters in the simulator.
+    var expected = ""
+    for character in text {
+      element.typeText(String(character))
+      expected.append(character)
+      let valueMatches = expectation(for: NSPredicate(format: "value == %@", expected), evaluatedWith: element)
+      wait(for: [valueMatches], timeout: 5)
+    }
+  }
+
   func testStoreFeatureScreenshots() {
     continueAfterFailure = false
     let app = XCUIApplication(bundleIdentifier: "com.goldenepics.risequest")
@@ -51,17 +64,26 @@ final class ReleaseSmokeTests: XCTestCase {
     capture("store-05-coping", app: app)
 
     navigate("quests", app: app)
-    // Guest quests currently report an account-required load error. Dismiss the
-    // real alert before inspecting the creation form; do not inject an account.
-    let questLoadAlert = app.alerts["Error"]
-    if questLoadAlert.waitForExistence(timeout: 3) {
-      XCTAssertTrue(questLoadAlert.staticTexts["Failed to load quests"].exists)
-      questLoadAlert.buttons["OK"].tap()
-    }
+    XCTAssertFalse(app.alerts["Error"].exists, "Guest quests must load without an authentication alert")
     tapText("+ Create", app: app)
     XCTAssertTrue(app.staticTexts["Create Quest"].firstMatch.waitForExistence(timeout: 10))
     capture("store-06-quest-planning", app: app)
-    tapText("Cancel", app: app)
+    enterText("Review local task", in: app.textFields["Quest title"])
+    // iOS combines the multiline field's accessibility label and placeholder.
+    // Match the exported native label instead of requiring an exact identifier.
+    let description = app.textViews.matching(NSPredicate(format: "label BEGINSWITH %@", "Quest description")).firstMatch
+    XCTAssertTrue(description.waitForExistence(timeout: 10))
+    if !description.isHittable { app.swipeUp() }
+    enterText("Put one item back on the desk", in: description)
+    tapText("Create", app: app)
+    // The native card is an accessible Other containing its title and details,
+    // not a separate StaticText. Require the exact title prefix and guest scope.
+    let createdQuest = app.descendants(matching: .any).matching(NSPredicate(
+      format: "label BEGINSWITH %@ AND label CONTAINS %@",
+      "Review local task,", "On this device only"
+    )).firstMatch
+    XCTAssertTrue(createdQuest.waitForExistence(timeout: 15), "Created guest quest must appear on this device")
+    capture("verified-guest-quest-created", app: app)
 
     navigate("home", app: app)
     let sleep = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Sleep & recovery")).firstMatch
@@ -75,6 +97,13 @@ final class ReleaseSmokeTests: XCTestCase {
     app.buttons["Challenge mini-games"].tap()
     XCTAssertTrue(app.staticTexts["🎮 Choose Your Challenge"].waitForExistence(timeout: 10))
     capture("store-09-mini-games", app: app)
+    tapText("Math Challenge", app: app)
+    let answer = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Answer ")).firstMatch
+    XCTAssertTrue(answer.waitForExistence(timeout: 10))
+    answer.tap()
+    XCTAssertTrue(app.buttons["Choose another game"].waitForExistence(timeout: 5), "Answering must not crash the game")
+    capture("verified-math-answer", app: app)
+    tapText("Choose another game", app: app)
     // This selector is a native full-screen Modal, so underlying tabs are hidden.
     tapText("← Back", app: app)
     navigate("more", app: app)

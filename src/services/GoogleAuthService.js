@@ -1,7 +1,8 @@
+import { AppAlert as Alert } from '../services/dialogQueue';
 import { clearAuthToken } from './AuthTokenStorage';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert } from 'react-native';
+
 import riseQuestWalletService from './RiseQuestWalletService';
 
 const normalizeUserId = (email) => String(email || '').trim().toLowerCase();
@@ -11,12 +12,12 @@ export const GoogleAuthService = {
   async initialize() {
     try {
       GoogleSignin.configure({
-        webClientId: '628709146989-df1prq7ube4v3383tg8gfe4ha3asrtb6.apps.googleusercontent.com',
+        webClientId: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
         offlineAccess: true,
         hostedDomain: '',
         forceCodeForRefreshToken: true,
         accountName: '',
-        iosClientId: '628709146989-2cgc85rvqm0c3ltnmod9slvtiqfb0okf.apps.googleusercontent.com',
+        iosClientId: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
         googleServicePlistPath: '',
         openIdSupport: false,
         profileImageSize: 120,
@@ -158,19 +159,6 @@ export const GoogleAuthService = {
       // Get wallet balance (created implicitly on first award/spend in backend)
       const wallet = await riseQuestWalletService.getWallet(userId);
 
-      // Award welcome bonus once per user
-      const welcomeKey = `risequest_welcome_bonus_awarded:${userId}`;
-      const alreadyAwarded = await AsyncStorage.getItem(welcomeKey);
-      if (!alreadyAwarded) {
-        await riseQuestWalletService.awardRisePoints(
-          userId,
-          100,
-          'Welcome to RiseQuest!',
-          { type: 'welcome_bonus', isNewUser: true }
-        );
-        await AsyncStorage.setItem(welcomeKey, 'true');
-      }
-      
       console.log('✅ User synced with backend');
       return { userId, wallet };
     } catch (error) {
@@ -232,23 +220,7 @@ export const GoogleAuthService = {
       if (!userId) return false;
 
       // Sync stats by awarding points for achievements
-      if (stats?.totalWakeUps > 0) {
-        // Award points for historical wake-ups (one-time sync)
-        const syncKey = 'historical_wakeups_synced';
-        const alreadySynced = await AsyncStorage.getItem(syncKey);
-        
-        if (!alreadySynced) {
-          await riseQuestWalletService.awardRisePoints(
-            userId,
-            stats.totalWakeUps * 10,
-            `Historical sync: ${stats.totalWakeUps} wake-ups`,
-            { type: 'historical_sync', wakeUps: stats.totalWakeUps }
-          );
-          
-          await AsyncStorage.setItem(syncKey, 'true');
-          console.log('☁️ Historical progress synced to backend');
-        }
-      }
+      // Historical device counters are never converted into spendable currency.
 
       return true;
     } catch (error) {
@@ -324,3 +296,4 @@ export const GoogleAuthService = {
     }
   },
 };
+

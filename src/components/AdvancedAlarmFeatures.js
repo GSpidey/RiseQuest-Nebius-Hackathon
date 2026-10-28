@@ -1,16 +1,7 @@
+import ModalHeading from './ModalHeading';
+import Modal, { AppAlert as Alert } from './AppModal';
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Switch,
-  Modal,
-  FlatList,
-  Alert,
-  Dimensions,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch, FlatList, Dimensions } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Sound from 'react-native-sound';
 import { pick, types, isCancel } from '@react-native-documents/picker';
@@ -89,10 +80,10 @@ export const AdvancedAlarmFeatures = ({
   };
 
   const ToneSelector = () => (
-    <Modal visible={showToneSelector} animationType="slide">
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.modalContainer}>
+    <Modal visible={showToneSelector} animationType="slide" onRequestClose={() => setShowToneSelector(false)}>
+      <LinearGradient colors={['#FFF9F2', '#FFF0DB']} style={styles.modalContainer}>
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>🎵 Choose Wake-Up Tone</Text>
+          <View style={{flex:1,paddingTop:8}}><ModalHeading compact title='🎵 Choose Wake-Up Tone' icon="star"/></View>
           <TouchableOpacity onPress={() => setShowToneSelector(false)}>
             <Text style={styles.closeButton}>✕</Text>
           </TouchableOpacity>
@@ -165,10 +156,10 @@ export const AdvancedAlarmFeatures = ({
   );
 
   const VolumeConfiguration = () => (
-    <Modal visible={showVolumeConfig} animationType="slide">
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.modalContainer}>
+    <Modal visible={showVolumeConfig} animationType="slide" onRequestClose={() => setShowVolumeConfig(false)}>
+      <LinearGradient colors={['#FFF9F2', '#FFF0DB']} style={styles.modalContainer}>
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>🔊 Volume Configuration</Text>
+          <View style={{flex:1,paddingTop:8}}><ModalHeading compact title='🔊 Volume Configuration' icon="star"/></View>
           <TouchableOpacity onPress={() => setShowVolumeConfig(false)}>
             <Text style={styles.closeButton}>✕</Text>
           </TouchableOpacity>
@@ -244,10 +235,10 @@ export const AdvancedAlarmFeatures = ({
   );
 
   const WeatherConfiguration = () => (
-    <Modal visible={showWeatherConfig} animationType="slide">
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.modalContainer}>
+    <Modal visible={showWeatherConfig} animationType="slide" onRequestClose={() => setShowWeatherConfig(false)}>
+      <LinearGradient colors={['#FFF9F2', '#FFF0DB']} style={styles.modalContainer}>
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>🌤️ Weather Integration</Text>
+          <View style={{flex:1,paddingTop:8}}><ModalHeading compact title='🌤️ Weather Integration' icon="star"/></View>
           <TouchableOpacity onPress={() => setShowWeatherConfig(false)}>
             <Text style={styles.closeButton}>✕</Text>
           </TouchableOpacity>
@@ -302,10 +293,10 @@ export const AdvancedAlarmFeatures = ({
   );
 
   const MultiStageConfiguration = () => (
-    <Modal visible={showMultiStageConfig} animationType="slide">
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.modalContainer}>
+    <Modal visible={showMultiStageConfig} animationType="slide" onRequestClose={() => setShowMultiStageConfig(false)}>
+      <LinearGradient colors={['#FFF9F2', '#FFF0DB']} style={styles.modalContainer}>
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>🎯 Multi-Stage Wake-Up</Text>
+          <View style={{flex:1,paddingTop:8}}><ModalHeading compact title='🎯 Multi-Stage Wake-Up' icon="star"/></View>
           <TouchableOpacity onPress={() => setShowMultiStageConfig(false)}>
             <Text style={styles.closeButton}>✕</Text>
           </TouchableOpacity>
@@ -579,21 +570,22 @@ const styles = StyleSheet.create({
     paddingTop: 40,
   },
   modalHeader: {
+    backgroundColor:'#FFF0DB',borderBottomLeftRadius:26,borderBottomRightRadius:26,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.2)',
+    borderBottomColor: '#F3E3CF',
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: 'white',
+    color: '#252438',
   },
   closeButton: {
     fontSize: 24,
-    color: 'white',
+    color: '#252438',
     padding: 5,
   },
   modalContent: {
@@ -603,7 +595,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: 'white',
+    color: '#252438',
     marginVertical: 15,
   },
 
@@ -611,13 +603,13 @@ const styles = StyleSheet.create({
   toneItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#FFFFFF',
     padding: 15,
     borderRadius: 10,
     marginBottom: 8,
   },
   toneItemSelected: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#F3E3CF',
     borderWidth: 2,
     borderColor: 'white',
   },
@@ -626,7 +618,7 @@ const styles = StyleSheet.create({
   },
   toneName: {
     fontSize: 16,
-    color: 'white',
+    color: '#252438',
     fontWeight: '500',
   },
   premiumBadge: {
@@ -639,13 +631,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   playButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#F3E3CF',
     padding: 8,
     borderRadius: 6,
     marginRight: 10,
   },
   playButtonText: {
-    color: 'white',
+    color: '#252438',
     fontSize: 16,
   },
   selectedIcon: {
@@ -664,7 +656,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   uploadButtonText: {
-    color: 'white',
+    color: '#252438',
     fontSize: 16,
     fontWeight: '500',
   },
@@ -688,12 +680,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   volumeStepText: {
-    color: 'white',
+    color: '#252438',
     fontSize: 20,
     fontWeight: '900',
   },
   volumeLabel: {
-    color: 'white',
+    color: '#252438',
     fontSize: 16,
     textAlign: 'center',
     fontWeight: '500',
@@ -701,24 +693,24 @@ const styles = StyleSheet.create({
   curveItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#FFFFFF',
     padding: 15,
     borderRadius: 10,
     marginBottom: 8,
   },
   curveItemSelected: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#F3E3CF',
     borderWidth: 2,
     borderColor: 'white',
   },
   curveName: {
     fontSize: 16,
-    color: 'white',
+    color: '#252438',
     fontWeight: '500',
   },
   curveDescription: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
+    color: '#252438',
     marginTop: 2,
   },
 
@@ -726,42 +718,42 @@ const styles = StyleSheet.create({
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#FFFFFF',
     padding: 15,
     borderRadius: 10,
     marginBottom: 10,
   },
   settingLabel: {
     fontSize: 16,
-    color: 'white',
+    color: '#252438',
     fontWeight: '500',
   },
   settingDescription: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
+    color: '#252438',
     marginTop: 2,
   },
   weatherItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#FFFFFF',
     padding: 15,
     borderRadius: 10,
     marginBottom: 8,
   },
   weatherItemSelected: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#F3E3CF',
     borderWidth: 2,
     borderColor: 'white',
   },
   weatherName: {
     fontSize: 16,
-    color: 'white',
+    color: '#252438',
     fontWeight: '500',
   },
   weatherMessage: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
+    color: '#252438',
     marginTop: 2,
   },
 
@@ -769,7 +761,7 @@ const styles = StyleSheet.create({
   stageItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#FFFFFF',
     padding: 15,
     borderRadius: 10,
     marginBottom: 8,
@@ -777,12 +769,12 @@ const styles = StyleSheet.create({
   stageName: {
     flex: 1,
     fontSize: 16,
-    color: 'white',
+    color: '#252438',
     fontWeight: '500',
   },
   stageTime: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
+    color: '#252438',
     marginRight: 15,
   },
   stageEnabled: {
@@ -793,3 +785,4 @@ const styles = StyleSheet.create({
 });
 
 export default AdvancedAlarmFeatures;
+

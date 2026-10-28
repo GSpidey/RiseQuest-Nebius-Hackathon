@@ -1,17 +1,7 @@
+import ModalHeading from './ModalHeading';
+import Modal, { AppAlert as Alert } from './AppModal';
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  SafeAreaView,
-  Modal,
-  FlatList,
-  TextInput,
-  Alert,
-  Share,
-} from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView, FlatList, TextInput, Share } from 'react-native';
 import { UserProfileService } from '../models/RiseQuestModels';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -460,6 +450,7 @@ const CopingLibrary = ({ userProfile }) => {
     return (
       <Modal
         visible={showingStrategy}
+        onRequestClose={() => setShowingStrategy(false)}
         animationType="slide"
         presentationStyle="pageSheet"
       >
@@ -596,7 +587,7 @@ const CopingLibrary = ({ userProfile }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#FFF9F2',
   },
   header: {
     padding: 20,
@@ -641,8 +632,8 @@ const styles = StyleSheet.create({
     minWidth: 80,
   },
   selectedCategory: {
-    backgroundColor: '#667eea',
-    borderColor: '#667eea',
+    backgroundColor: '#A65000',
+    borderColor: '#A65000',
   },
   categoryEmoji: {
     fontSize: 16,
@@ -653,7 +644,7 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   selectedCategoryLabel: {
-    color: '#fff',
+    color: '#252438',
   },
   strategiesList: {
     paddingHorizontal: 20,
@@ -718,7 +709,7 @@ const styles = StyleSheet.create({
   },
   whenToUse: {
     fontSize: 12,
-    color: '#667eea',
+    color: '#A65000',
     fontStyle: 'italic',
   },
   emptyContainer: {
@@ -733,9 +724,10 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#FFF9F2',
   },
   modalHeader: {
+    backgroundColor:'#FFF0DB',borderBottomLeftRadius:26,borderBottomRightRadius:26,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -746,11 +738,11 @@ const styles = StyleSheet.create({
   },
   modalClose: {
     fontSize: 16,
-    color: '#667eea',
+    color: '#A65000',
   },
   modalShare: {
     fontSize: 16,
-    color: '#667eea',
+    color: '#A65000',
   },
   strategyDetailContainer: {
     flex: 1,
@@ -807,8 +799,8 @@ const styles = StyleSheet.create({
     width: 25,
     height: 25,
     borderRadius: 12.5,
-    backgroundColor: '#667eea',
-    color: '#fff',
+    backgroundColor: '#A65000',
+    color: '#252438',
     textAlign: 'center',
     fontSize: 14,
     fontWeight: 'bold',
@@ -845,3 +837,4 @@ const styles = StyleSheet.create({
 });
 
 export default CopingLibrary;
+

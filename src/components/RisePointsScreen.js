@@ -1,13 +1,7 @@
+import Modal, { AppAlert as Alert } from './AppModal';
+import { sunrise } from './SunriseUI';
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  Modal,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { MonetizationService } from '../utils/MonetizationService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -69,7 +63,7 @@ export default function RisePointsScreen({ visible, onClose }) {
   };
 
   const purchaseWithPoints = async (item, cost) => {
-    const success = await MonetizationService.spendRisePoints(cost, item.name);
+    const success = await MonetizationService.spendRisePoints(cost, item.name, {itemIds: [item.id]});
     if (success) {
       Alert.alert('Unlocked! 🎉', `You've unlocked ${item.name}!`);
       loadUserData(); // Refresh data
@@ -77,60 +71,8 @@ export default function RisePointsScreen({ visible, onClose }) {
   };
 
   const rewardItems = [
-    {
-      id: 'basic_mini_game',
-      name: 'Extra Mini-Game',
-      description: 'Unlock 1 additional mini-game for 24 hours',
-      cost: 100,
-      icon: '🎮',
-      type: 'temporary',
-      duration: '24 hours'
-    },
-    {
-      id: 'voice_pack_trial',
-      name: 'Celebrity Voice Trial',
-      description: 'Try any voice pack for 7 days',
-      cost: 200,
-      icon: '🎵',
-      type: 'trial',
-      duration: '7 days'
-    },
-    {
-      id: 'theme_unlock',
-      name: 'Premium Theme',
-      description: 'Unlock a premium theme permanently',
-      cost: 150,
-      icon: '🎨',
-      type: 'permanent',
-      duration: 'Forever'
-    },
-    {
-      id: 'premium_trial_day',
-      name: 'Premium Day Pass',
-      description: 'Full Premium access for 24 hours',
-      cost: 500,
-      icon: '👑',
-      type: 'trial',
-      duration: '24 hours'
-    },
-    {
-      id: 'streak_protection',
-      name: 'Streak Protection',
-      description: 'Protect your streak from one missed alarm',
-      cost: 300,
-      icon: '🛡️',
-      type: 'insurance',
-      duration: 'One-time use'
-    },
-    {
-      id: 'double_points_day',
-      name: 'Double Points Day',
-      description: 'Earn 2x RisePoints for 24 hours',
-      cost: 250,
-      icon: '⚡',
-      type: 'multiplier',
-      duration: '24 hours'
-    }
+    {id:'avatar_orbit',name:'Orbit companion',description:'A permanent companion for your collection',cost:650,icon:'🪐',duration:'Permanent'},
+    {id:'avatar_ember',name:'Ember companion',description:'A bright full-body companion',cost:850,icon:'☀️',duration:'Permanent'},
   ];
 
   const achievements = [
@@ -139,7 +81,7 @@ export default function RisePointsScreen({ visible, onClose }) {
       description: 'Build a 30-day wake-up streak',
       progress: Math.min(Number(userStats.streak || 0), 30),
       total: 30,
-      reward: 500,
+      reward: 0,
       icon: '👑',
       completed: Number(userStats.streak || 0) >= 30,
     },
@@ -148,7 +90,7 @@ export default function RisePointsScreen({ visible, onClose }) {
       description: 'Reach 50 successful wake-ups',
       progress: Math.min(Number(userStats.totalWakeUps || 0), 50),
       total: 50,
-      reward: 200,
+      reward: 0,
       icon: '🌅',
       completed: Number(userStats.totalWakeUps || 0) >= 50,
     },
@@ -157,7 +99,7 @@ export default function RisePointsScreen({ visible, onClose }) {
       description: 'Complete 50 mini-game challenges',
       progress: Math.min(Number(userStats.challengesCompleted || 0), 50),
       total: 50,
-      reward: 200,
+      reward: 0,
       icon: '🎯',
       completed: Number(userStats.challengesCompleted || 0) >= 50,
     },
@@ -192,9 +134,9 @@ export default function RisePointsScreen({ visible, onClose }) {
       icon: '🚫'
     },
     {
-      name: 'Maintain your streak',
+      name: 'Reach a 7-day streak milestone',
       points: MonetizationService.RISE_POINT_REWARDS.STREAK_MILESTONE,
-      completed: isToday(userStats.lastWakeUpAt),
+      completed: isToday(userStats.lastWakeUpAt) && userStats.streak > 0 && userStats.streak % 7 === 0,
       icon: '🔥'
     }
   ];
@@ -211,7 +153,7 @@ export default function RisePointsScreen({ visible, onClose }) {
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.container}>
+      <LinearGradient colors={[sunrise.background, sunrise.orangeTint]} style={styles.container}>
         <ScrollView contentContainerStyle={styles.content}>
           {/* Header */}
           <View style={styles.header}>
@@ -330,27 +272,27 @@ export default function RisePointsScreen({ visible, onClose }) {
 
           {/* How to Earn Points */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>💡 How to Earn RisePoints</Text>
+            <Text style={styles.sectionTitle}>💡 Earn a little, consistently</Text>
             <View style={styles.earnPointsGrid}>
               <View style={styles.earnPointsItem}>
                 <Text style={styles.earnPointsIcon}>⏰</Text>
                 <Text style={styles.earnPointsAction}>Wake up on time</Text>
-                <Text style={styles.earnPointsValue}>+10 pts</Text>
+                <Text style={styles.earnPointsValue}>+3 pts / day</Text>
               </View>
               <View style={styles.earnPointsItem}>
                 <Text style={styles.earnPointsIcon}>🎮</Text>
                 <Text style={styles.earnPointsAction}>Complete challenge</Text>
-                <Text style={styles.earnPointsValue}>+25 pts</Text>
+                <Text style={styles.earnPointsValue}>+2 pts / day</Text>
               </View>
               <View style={styles.earnPointsItem}>
                 <Text style={styles.earnPointsIcon}>🔥</Text>
                 <Text style={styles.earnPointsAction}>7-day streak</Text>
-                <Text style={styles.earnPointsValue}>+50 pts</Text>
+                <Text style={styles.earnPointsValue}>+10 pts / milestone</Text>
               </View>
               <View style={styles.earnPointsItem}>
                 <Text style={styles.earnPointsIcon}>🚫</Text>
                 <Text style={styles.earnPointsAction}>No snooze day</Text>
-                <Text style={styles.earnPointsValue}>+20 pts</Text>
+                <Text style={styles.earnPointsValue}>Personal achievement</Text>
               </View>
             </View>
           </View>
@@ -359,7 +301,7 @@ export default function RisePointsScreen({ visible, onClose }) {
           <View style={styles.premiumCTA}>
             <Text style={styles.premiumCTATitle}>Want Unlimited Features?</Text>
             <Text style={styles.premiumCTAText}>
-              Premium members earn 2x RisePoints and get exclusive rewards!
+              Earned rewards are capped at 20 RisePoints per UTC day. Premium includes a separate allowance after each verified paid billing period.
             </Text>
             <TouchableOpacity style={styles.premiumCTAButton}>
               <Text style={styles.premiumCTAButtonText}>Upgrade to Premium 👑</Text>
@@ -374,6 +316,7 @@ export default function RisePointsScreen({ visible, onClose }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: sunrise.background,
   },
   content: {
     padding: 20,
@@ -383,10 +326,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#667eea',
+    backgroundColor: sunrise.orange,
   },
   loadingText: {
-    color: '#fff',
+    color: sunrise.ink,
     fontSize: 18,
   },
   header: {
@@ -400,24 +343,24 @@ const styles = StyleSheet.create({
     right: 0,
     width: 40,
     height: 40,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
   closeButtonText: {
-    color: '#fff',
+    color: sunrise.ink,
     fontSize: 18,
     fontWeight: 'bold',
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#fff',
+    color: sunrise.ink,
     textAlign: 'center',
   },
   balanceCard: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 25,
     alignItems: 'center',
@@ -425,7 +368,7 @@ const styles = StyleSheet.create({
   },
   balanceLabel: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.8)',
+    color: sunrise.muted,
     marginBottom: 5,
   },
   balanceAmount: {
@@ -436,7 +379,7 @@ const styles = StyleSheet.create({
   },
   balanceSubtext: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
+    color: sunrise.muted,
     textAlign: 'center',
   },
   section: {
@@ -445,16 +388,16 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#fff',
+    color: sunrise.ink,
     marginBottom: 10,
   },
   sectionSubtext: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
+    color: sunrise.muted,
     marginBottom: 15,
   },
   taskCard: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 15,
     flexDirection: 'row',
@@ -476,7 +419,7 @@ const styles = StyleSheet.create({
   },
   taskName: {
     fontSize: 16,
-    color: '#fff',
+    color: sunrise.ink,
     fontWeight: '600',
   },
   taskPoints: {
@@ -494,14 +437,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#48bb78',
   },
   taskPending: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#FFFFFF',
   },
   taskStatusText: {
-    color: '#fff',
+    color: sunrise.ink,
     fontWeight: 'bold',
   },
   achievementCard: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#FFFFFF',
     borderRadius: 15,
     padding: 20,
     marginBottom: 15,
@@ -521,11 +464,11 @@ const styles = StyleSheet.create({
   achievementName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: sunrise.ink,
   },
   achievementDescription: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
+    color: sunrise.muted,
     marginTop: 2,
   },
   achievementReward: {
@@ -540,7 +483,7 @@ const styles = StyleSheet.create({
   progressBar: {
     flex: 1,
     height: 8,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#FFFFFF',
     borderRadius: 4,
     marginRight: 10,
   },
@@ -551,7 +494,7 @@ const styles = StyleSheet.create({
   },
   progressText: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
+    color: sunrise.muted,
   },
   completedBadge: {
     backgroundColor: '#48bb78',
@@ -562,12 +505,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   completedText: {
-    color: '#fff',
+    color: sunrise.ink,
     fontSize: 12,
     fontWeight: 'bold',
   },
   rewardCard: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#FFFFFF',
     borderRadius: 15,
     padding: 20,
     marginBottom: 15,
@@ -590,11 +533,11 @@ const styles = StyleSheet.create({
   rewardName: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#fff',
+    color: sunrise.ink,
   },
   rewardDescription: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
+    color: sunrise.muted,
     marginTop: 2,
   },
   rewardDuration: {
@@ -618,10 +561,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   purchaseButtonDisabled: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#FFFFFF',
   },
   purchaseButtonText: {
-    color: '#fff',
+    color: sunrise.ink,
     fontSize: 12,
     fontWeight: 'bold',
   },
@@ -631,7 +574,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   earnPointsItem: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 15,
     width: '48%',
@@ -644,7 +587,7 @@ const styles = StyleSheet.create({
   },
   earnPointsAction: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
+    color: sunrise.muted,
     textAlign: 'center',
     marginBottom: 5,
   },
@@ -659,29 +602,30 @@ const styles = StyleSheet.create({
     padding: 25,
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#ffd700',
+    borderColor: sunrise.orange,
   },
   premiumCTATitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#fff',
+    color: sunrise.ink,
     marginBottom: 10,
   },
   premiumCTAText: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
+    color: sunrise.muted,
     textAlign: 'center',
     marginBottom: 15,
   },
   premiumCTAButton: {
-    backgroundColor: '#ffd700',
+    backgroundColor: sunrise.orange,
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 20,
   },
   premiumCTAButtonText: {
-    color: '#000',
+    color: sunrise.ink,
     fontSize: 16,
     fontWeight: 'bold',
   },
 });
+

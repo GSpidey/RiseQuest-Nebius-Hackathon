@@ -83,3 +83,20 @@ api-secrets.json
 .idea/
 *.swp
 *.swo
+
+# Public snapshot excludes local service configuration and signing artifacts
+android/app/google-services.json
+ios/GoogleService-Info.plist
+**/GoogleService-Info.plist
+**/local.properties
+*.keystore
+*.apk
+*.aab
+.gradle/
+.cxx/
+
+# Local device/service registration data
+**/adi-registration.properties
+
+# Also ignore local dependency-directory symlinks
+node_modules

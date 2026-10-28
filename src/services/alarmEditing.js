@@ -34,4 +34,16 @@ async function persistAlarmEdit(result, { persist, cancel, schedule }) {
   }
 }
 
-module.exports = { challengeDifficulty, prepareAlarmSave, persistAlarmEdit };
+async function persistAlarmDelete(alarms, id, {persist,cancel,schedule}) {
+  const alarm=alarms.find(a=>String(a.id)===String(id));
+  if(!alarm)throw new Error('This alarm no longer exists.');
+  const remaining=alarms.filter(a=>String(a.id)!==String(id));
+  await persist(remaining);
+  try {await cancel(alarm);} catch(error) {
+    await persist(alarms);
+    if(alarm.isEnabled!==false)await schedule(alarm);
+    throw error;
+  }
+  return remaining;
+}
+module.exports = { challengeDifficulty, prepareAlarmSave, persistAlarmEdit, persistAlarmDelete };

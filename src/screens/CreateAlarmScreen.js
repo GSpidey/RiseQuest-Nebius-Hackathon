@@ -1,24 +1,8 @@
+import Modal, { AppAlert as Alert } from '../components/AppModal';
+import { currentCollectionSound } from '../services/cosmeticSounds';
 import { getAuthToken } from '../services/AuthTokenStorage';
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  Switch,
-  Alert,
-  Modal,
-  ActivityIndicator,
-  Platform,
-  Linking,
-  PermissionsAndroid,
-  NativeModules,
-  Keyboard,
-  AppState,
-  useWindowDimensions,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Switch, ActivityIndicator, Platform, Linking, PermissionsAndroid, NativeModules, Keyboard, AppState, useWindowDimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { LocationService } from '../utils/LocationService';
@@ -31,12 +15,13 @@ import { challengeDifficulty } from '../services/alarmEditing';
 import { createAlarmPreview } from '../services/alarmPreview';
 import ModalHeading from '../components/ModalHeading';
 import { sunrise } from '../components/SunriseUI';
-import { loadAlarmVoices, prepareAlarmVoice } from '../services/alarmSpeech';
+import { loadAlarmVoices, prepareAlarmVoice, loadSavedVoiceSuggestion, useSavedVoiceSuggestion } from '../services/alarmSpeech';
+import { generationFailure, customerGenerationMessage } from '../services/alarmGenerationFeedback';
 import { UserProfileService } from '../models/RiseQuestModels';
 import AlarmBuddyPicker from '../components/AlarmBuddyPicker';
 import { resolveAlarmBuddy } from '../services/wakeBuddy';
 
-const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBalances }) => {
+const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, initialDraft = null, onRefreshBalances }) => {
   const pendingMessageRequest = useRef(null);
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
@@ -59,6 +44,7 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
     customToneName: null,
     locationId: 'current',
     locationAware: false,
+    ...initialDraft,
     ...initialAlarm,
     challengeDifficulty: challengeDifficulty(initialAlarm),
   });
@@ -107,6 +93,23 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
   const [showVoices, setShowVoices] = useState(false);
   const [speechError, setSpeechError] = useState('');
   const [defaultVoice, setDefaultVoice] = useState('');
+  const [voiceSuggestion, setVoiceSuggestion] = useState(null);
+  useEffect(() => {
+    let live = true;
+    if (!initialAlarm && voiceCatalog?.eligible) loadSavedVoiceSuggestion()
+      .then(saved => { if (live) setVoiceSuggestion(saved); }).catch(() => {});
+    return () => { live = false; };
+  }, [voiceCatalog?.eligible]);
+  const useVoiceSuggestion = async () => {
+    try {
+      const saved = await useSavedVoiceSuggestion(alarmData, voiceSuggestion);
+      // Apply only message/audio fields to the latest form state.
+      setAlarmData(previous => ({ ...previous, customMessage: saved.customMessage, voiceId: saved.voiceId,
+        speechUri: saved.speechUri, speechFingerprint: saved.speechFingerprint, speechText: saved.speechText,
+        speechVoiceId: saved.speechVoiceId, speechOwner: saved.speechOwner, speechDurationMs: saved.speechDurationMs }));
+      setVoiceSuggestion(null); setMessageError(''); setMessageNotice('');
+    } catch (_) { setMessageError('This message is unavailable. Choose another message.'); }
+  };
   useEffect(() => {
     let live = true;
     Promise.all([loadAlarmVoices(), UserProfileService.getUserProfile()]).then(([catalog, profile]) => {
@@ -134,7 +137,7 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
     let mounted = true;
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem('risequest_default_alarm_tone');
+        const raw = await currentCollectionSound() || await AsyncStorage.getItem('risequest_default_alarm_tone');
         if (!raw) return;
         const parsed = JSON.parse(raw);
         if (!mounted || !parsed) return;
@@ -215,9 +218,10 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
         body: payload,
       });
 
-      const { json, text } = await readJsonSafe(resp);
+      const { json } = await readJsonSafe(resp);
+      if (token !== await getAuthToken()) throw generationFailure(401);
       if (!resp.ok) {
-        throw new Error(json?.error || text || 'Failed to generate message');
+        throw generationFailure(resp.status, json || {});
       }
 
       const message = String(json?.message || '').trim();
@@ -231,12 +235,12 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
       const provider = json?.provider ? String(json.provider) : null;
 
       if (provider === 'curated' || provider === 'fallback' || refunded) {
-        setMessageNotice('Prepared suggestion · No RisePoints charged.');
+        setMessageNotice('Suggested message');
       }
       // The result is already visible. Refresh the normal wallet display quietly.
       Promise.resolve().then(() => onRefreshBalances?.()).catch(() => {});
     } catch (e) {
-      setMessageError(e?.message ? String(e.message) : 'Could not generate a message. Please try again.');
+      setMessageError(customerGenerationMessage(e));
     } finally {
       messageBusyRef.current = false;
       setGeneratingMessage(false);
@@ -573,10 +577,13 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
           <View style={styles.aiBlock}>
             <Text style={styles.aiTitle}>A familiar start to your morning</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={{ color: '#342855', fontSize: 16, flex: 1 }}>Realistic voice before the alarm tone</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: '#342855', fontSize: 16 }}>Realistic voice before the alarm tone</Text>
+                <Text style={styles.timeHint}>Prepare message audio · {voiceCatalog?.cost || 10} RP</Text>
+              </View>
               <Switch accessibilityLabel="Realistic wake-up voice" value={!!alarmData.speechEnabled}
                 disabled={saving || (!alarmData.speechEnabled && !voiceCatalog?.eligible)}
-                onValueChange={speechEnabled => setAlarmData(previous => ({ ...previous, speechEnabled }))} />
+                onValueChange={speechEnabled => setAlarmData(previous => ({ ...previous, speechEnabled, speechConsent: speechEnabled }))} />
             </View>
             {voiceCatalog?.unavailable ? <Text style={styles.timeHint}>Voice choices could not load. Check your connection and reopen this form. Saved voices and device speech remain available.</Text>
               : voiceCatalog && !voiceCatalog.eligible ? <Text style={styles.timeHint}>Realistic voices require an eligible adult account. Device speech remains available in Settings.</Text> : null}
@@ -595,19 +602,22 @@ const CreateAlarmScreen = ({ onSave, onCancel, initialAlarm = null, onRefreshBal
                   <Text style={styles.aiPillText}>{n} {n === 1 ? 'time' : 'times'}</Text>
                 </TouchableOpacity>)}
               </View>
-              <Text style={styles.timeHint}>Prepare on save · {voiceCatalog?.cost || 10} RP for a new message or voice. Unchanged saves and alarm playback are free. Downloaded audio works offline.</Text>
-              {Platform.OS === 'ios' && <Text style={styles.timeHint}>iPhone plays a combined voice-and-tone clip; system alarms may repeat that clip. For longer messages choose fewer repeats.</Text>}
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Switch accessibilityLabel="Allow message text to Async for voice generation" value={!!alarmData.speechConsent}
-                  onValueChange={speechConsent => setAlarmData(previous => ({ ...previous, speechConsent }))} />
-                <Text style={[styles.timeHint, { flex: 1 }]}>Send this message text to Async to prepare the voice. No profile or location is sent.</Text>
-              </View>
               {!!alarmData.speechUri && alarmData.speechText === alarmData.customMessage.trim() && alarmData.speechVoiceId === alarmData.voiceId &&
                 <TouchableOpacity style={styles.aiPill} onPress={() => previewPlaying ? stopPreview() : previewRef.current.play(alarmData.speechUri)}>
                   <Text style={styles.aiPillText}>{previewPlaying ? 'Stop preview' : 'Listen to saved voice'}</Text>
                 </TouchableOpacity>}
             </>}
           </View>
+
+          {!!voiceSuggestion && !alarmData.customMessage.trim() && (
+            <View style={styles.aiBlock}>
+              <Text style={styles.aiTitle}>A familiar message</Text>
+              <Text style={styles.timeHint}>{voiceSuggestion.speechText}</Text>
+              <TouchableOpacity style={styles.aiPill} accessibilityRole="button" onPress={useVoiceSuggestion}>
+                <Text style={styles.aiPillText}>Use message</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           <View style={styles.aiBlock}>
             <Text style={styles.aiTitle}>🤖 AI Message (cost: {AI_MESSAGE_COST} RisePoints)</Text>
@@ -1401,3 +1411,5 @@ const styles = StyleSheet.create({
 });
 
 export default CreateAlarmScreen;
+
+

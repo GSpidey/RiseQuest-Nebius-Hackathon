@@ -34,7 +34,7 @@ function clientSecret() {
   const key = process.env.APPLE_AUTH_PRIVATE_KEY_BASE64, kid = process.env.APPLE_AUTH_KEY_ID;
   if (!key || !kid) throw failure(503, 'Apple sign-in is temporarily unavailable.');
   return jwt.sign({}, Buffer.from(key, 'base64'), { algorithm: 'ES256', keyid: kid,
-    issuer: '928X72628Q', subject: CLIENT_ID, audience: ISSUER, expiresIn: '5m' });
+    issuer: process.env.APPLE_TEAM_ID, subject: CLIENT_ID, audience: ISSUER, expiresIn: '5m' });
 }
 async function tokenRequest(parameters, endpoint = 'token') {
   const response = await fetch(`${ISSUER}/auth/${endpoint}`, { method: 'POST', signal: AbortSignal.timeout(15000),

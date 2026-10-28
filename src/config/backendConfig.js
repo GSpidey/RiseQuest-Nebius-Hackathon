@@ -3,21 +3,13 @@ import { Platform } from 'react-native';
 
 const STORAGE_KEY = 'risequest_backend_base_url';
 
-// Existing Express backend, hosted locally through the RiseQuest Cloudflare Tunnel.
-export const DEFAULT_BACKEND_BASE_URL = 'https://risequest-api.goldenepics.com';
+// Set your own HTTPS backend for release builds; debug builds use localhost.
+export const DEFAULT_BACKEND_BASE_URL = 'https://api.example.invalid';
 
-export function migrateBackendMediaUrl(value) {
-  return typeof value === 'string'
-    ? value.replace(/^https?:\/\/178\.156\.157\.240(?::3000)?(?=\/|$)/, DEFAULT_BACKEND_BASE_URL)
-    : value;
-}
+export function migrateBackendMediaUrl(value) { return value; }
 
 export async function getBackendBaseUrl() {
   const saved = await AsyncStorage.getItem(STORAGE_KEY);
-  if (saved && /^https?:\/\/178\.156\.157\.240(?::3000)?\/?$/.test(saved)) {
-    await AsyncStorage.setItem(STORAGE_KEY, DEFAULT_BACKEND_BASE_URL);
-    return DEFAULT_BACKEND_BASE_URL;
-  }
   if (saved && (__DEV__ || /^https:\/\//i.test(saved))) return saved;
 
   if (__DEV__) {

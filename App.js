@@ -1,33 +1,41 @@
+import Modal, { AppAlert as Alert } from './src/components/AppModal';
+import {createCareManager} from './src/features/companion/careCommands';
+import SupportScreen from './src/features/companion/SupportScreen';
+import ReaderScreen from './src/features/companion/ReaderScreen';
+import {restoreCompanion,supportSnapshot} from './src/features/companion/supportClient';
+import {scheduleSupportReminders,cancelSupportReminders} from './src/features/companion/supportReminders';
+import { configureVoiceAccount, setVoiceContext, playReading, stopVoiceConversation, registerCompanionActions } from './src/features/companion/voiceConversation';
+import { companionDestinations } from './src/features/companion/actions';
+import { createCompanionManager } from './src/features/companion/management';
+import { prepareCollectionSound, applyCollectionSound, clearCollectionSound } from './src/services/cosmeticSounds';
+import QuestService from './src/services/QuestService';
+import GoldenEpicsLogo from './src/components/GoldenEpicsLogo';
+import WelcomePanel from './src/components/WelcomePanel';
+import ProfileScreen from './src/screens/ProfileScreen';
+import FloatingCompanion from './src/features/companion/FloatingCompanion';
+import { signInWithGoldenEpics, cancelGoldenSignIn } from './src/services/GoldenAuthService';
+import {saveProgress} from './src/services/progressStorage';
+import ProgressCard, { XpBar } from './src/components/ProgressCard';
+import { levelProgress, legacyTotal } from './backend/src/leveling';
+import { useCollection, refreshCollection, changeCollection } from './src/services/cosmeticCollection';
+import { ThemeBackdrop, MotionScreen, MotionIcon, Celebration, setMotionPreference, useReducedMotion, useThemeMotion } from './src/features/customization/ThemeMotion';
+import Medal from './src/features/customization/Medal';
+import {getThemeGradient} from './src/config/themeCatalog';
+import SmartWakeScreen from './src/features/routine/SmartWakeScreen';
+import CompanionHub from './src/features/companion/CompanionHub';
+import {featureApi} from './src/features/api';
+import CompanionAvatar from './src/features/companion/CompanionAvatar';
+import RoutineScreen from './src/features/routine/RoutineScreen';
+import AdaptiveTraining from './src/features/training/AdaptiveTraining';
 import { getAuthToken, setAuthToken, clearAuthToken } from './src/services/AuthTokenStorage';
 import { checkStoredSession } from './src/services/sessionValidation';
-import { challengeDifficulty, prepareAlarmSave, persistAlarmEdit } from './src/services/alarmEditing';
+import { challengeDifficulty, prepareAlarmSave, persistAlarmEdit, persistAlarmDelete } from './src/services/alarmEditing';
 import { nextWakeStreak } from './src/services/wakeStreak';
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  AccessibilityInfo,
-  StatusBar,
-  Dimensions,
-  Modal,
-  Platform,
-  TextInput,
-  KeyboardAvoidingView,
-  Keyboard,
-  NativeModules,
-  NativeEventEmitter,
-  AppState,
-  BackHandler,
-  Image,
-} from 'react-native';
+import { StyleSheet, unstable_batchedUpdates, Text, View, ScrollView, TouchableOpacity, AccessibilityInfo, StatusBar, Dimensions, Platform, TextInput, KeyboardAvoidingView, Keyboard, NativeModules, NativeEventEmitter, AppState, BackHandler, Image } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import PushNotification from 'react-native-push-notification';
-import Geolocation from 'react-native-geolocation-service';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { requestNotifications, canScheduleExactAlarms, openSettings } from 'react-native-permissions';
 import { StripeProvider } from '@stripe/stripe-react-native';
@@ -83,7 +91,7 @@ import ErrorLogService from './src/utils/ErrorLogService';
 import QuestScreen from './src/screens/QuestScreen';
 
 // Google Sign-In
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, GoogleSigninButton } from '@react-native-google-signin/google-signin';
 import { appleAuth, AppleButton } from '@invertase/react-native-apple-authentication';
 import { signInWithApple } from './src/services/AppleAuthService';
 
@@ -96,10 +104,22 @@ const { width, height } = Dimensions.get('window');
 export default function App() {
   // Core App State
   const [currentScreen, setCurrentScreen] = useState('loading');
+  const [companionCharacter, setCompanionCharacter] = useState('sol');
+  const [alarmDraft, setAlarmDraft] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isGuest, setIsGuest] = useState(false);
+  useEffect(()=>{void configureVoiceAccount(isAuthenticated && !isGuest ? userProfile?.id || userProfile?.email || null : null);},[isAuthenticated,isGuest,userProfile?.id,userProfile?.email]);
+  useEffect(()=>{
+    let active=true;const owner=isAuthenticated&&!isGuest?userProfile?.id||userProfile?.email:null;
+    setCompanionCharacter('sol');setVoiceContext({companion:'sol',personality:'gentle'});cancelSupportReminders();NativeModules.RiseQuestReader?.stopCapture();
+    if(owner){
+      restoreCompanion(owner).then(value=>{if(active){setCompanionCharacter(value.character);setVoiceContext({companion:value.character,personality:value.personality});}}).catch(()=>{});
+      supportSnapshot().then(result=>{if(active)void scheduleSupportReminders(owner,result.preferences.data);}).catch(()=>{});
+    }
+    return()=>{active=false;cancelSupportReminders();NativeModules.RiseQuestReader?.stopCapture();};
+  },[isAuthenticated,isGuest,userProfile?.id,userProfile?.email]);
   const [wellnessTab, setWellnessTab] = useState('mood');
   const [verifiedAdminRole, setVerifiedAdminRole] = useState(false);
   const [showAuthInline, setShowAuthInline] = useState(false);
@@ -142,6 +162,83 @@ export default function App() {
     }
   }, [currentScreen]);
 
+  // Google Auth setup
+  useEffect(() => {
+    GoogleSignin.configure({
+      webClientId: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
+      iosClientId: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
+      offlineAccess: true,
+      scopes: ['profile', 'email']
+    });
+  }, []);
+
+  // Existing State
+  const [alarms, setAlarms] = useState([]);
+  const [questRevision, setQuestRevision] = useState(0);
+  const companionRuntime = useRef({});
+  const [userStats, setUserStats] = useState({
+    level: 1,
+    experience: 0,
+    streak: 0,
+    totalWakeUps: 0,
+    challengesCompleted: 0,
+    snoozesUsed: 0,
+    lastWakeUpAt: null,
+    lastChallengeAt: null,
+    lastSnoozeAt: null,
+  });
+
+  // Modal States
+  const [showCreateAlarm, setShowCreateAlarm] = useState(false);
+  const [editingAlarm, setEditingAlarm] = useState(null);
+  const [showMiniGame, setShowMiniGame] = useState(false);
+  const [showEnhancedAlarm, setShowEnhancedAlarm] = useState(false);
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [welcome, setWelcome] = useState(null);
+  const [freshWelcome, setFreshWelcome] = useState(false);
+  const welcomeChecked = useRef(null);
+  const [showRisePoints, setShowRisePoints] = useState(false);
+  const [showCosmeticStore, setShowCosmeticStore] = useState(false);
+  const [showPaymentTest, setShowPaymentTest] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [userRole, setUserRole] = useState('USER');
+  const [showTermsAndConditions, setShowTermsAndConditions] = useState(false);
+  const [showSupportCenter, setShowSupportCenter] = useState(false);
+  const [upgradeSource, setUpgradeSource] = useState('general');
+  const [currentActiveAlarm, setCurrentActiveAlarm] = useState(null);
+  useEffect(()=>{if(currentActiveAlarm)stopVoiceConversation('Voice chat stopped for your alarm.',true);},[currentActiveAlarm]);
+  const closedAlarmUntilRef = useRef(new Map());
+  const [currentGameType, setCurrentGameType] = useState('math');
+  const [subscription, setSubscription] = useState(null);
+
+  // Alarm challenge takeover state
+  const [challengeLockActive, setChallengeLockActive] = useState(false);
+  const [challengeGiveUpEnabledAt, setChallengeGiveUpEnabledAt] = useState(0);
+  const alarmActionBusyRef = useRef(false);
+  const notificationConfiguredRef = useRef(false);
+
+  const [stripePublishableKey, setStripePublishableKey] = useState(null);
+
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [communityEntry, setCommunityEntry] = useState({ tab: 'feed', request: 0 });
+  const [risePointsBalance, setRisePointsBalance] = useState(null);
+
+  const [mustSetPassword, setMustSetPassword] = useState(false);
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordNew, setPasswordNew] = useState('');
+  const [passwordConfirm, setPasswordConfirm] = useState('');
+
+  const [homeWeather, setHomeWeather] = useState(null);
+  const [homeWeatherLoading, setHomeWeatherLoading] = useState(false);
+  const homeWeatherLastFetchRef = useRef(0);
+
+  const collection = useCollection();
+  const reducedMotion = useReducedMotion();
+  const themeMotion = useThemeMotion();
+  const modalTransition = reducedMotion || themeMotion.effect === 'none' ? 'none' : ['petals','aurora'].includes(themeMotion.effect) ? 'fade' : 'slide';
+  const appThemeId = collection.loadout.themeId;
+  const [navigationHeight, setNavigationHeight] = useState(90);
   useEffect(() => {
     if (Platform.OS !== 'android') return;
 
@@ -245,80 +342,73 @@ export default function App() {
     showSupportCenter,
   ]);
   
-  // Google Auth setup
+  const currentProgress = collection.progression || levelProgress(legacyTotal(userStats));
+  const checkinAccount = useRef(null);
+  const [checkinDay,setCheckinDay]=useState(()=>new Date().toISOString().slice(0,10));
+  useEffect(()=>{const timer=setInterval(()=>setCheckinDay(new Date().toISOString().slice(0,10)),60000);return()=>clearInterval(timer);},[]);
+  useEffect(()=>{checkinAccount.current=null;},[userProfile?.id,userProfile?.email]);
+  useEffect(()=>{
+    if(!isAuthenticated||isGuest||needsOnboarding)return;
+    const key=(userProfile?.id||userProfile?.email)+':'+checkinDay;
+    if(checkinAccount.current===key)return;
+    let active=true;
+    (async()=>{
+      const raw=await AsyncStorage.getItem('risequest_stats');
+      let saved={};try{saved=raw?JSON.parse(raw):{};}catch(_){}
+      const owner=saved.owner;
+      const id=userProfile?.id||userProfile?.email;
+      const legacy=owner===id&&!saved.serverXp?legacyTotal(saved):undefined;
+      await featureApi('/api/progression/check-in',legacy===undefined?{}:{legacyXp:Math.min(1000000,legacy)});
+      if(active){checkinAccount.current=key;await refreshCollection();}
+    })().catch(()=>{});
+    return()=>{active=false;};
+  },[isAuthenticated,isGuest,needsOnboarding,userProfile?.id,userProfile?.email,currentScreen,checkinDay]);
+  useEffect(()=>{if(!collection.progression)return;
+    setUserStats(prev=>{const next={...prev,owner:userProfile?.id||userProfile?.email,experience:collection.progression.totalXp,level:collection.progression.level,xpVersion:2,serverXp:true};saveProgress(AsyncStorage,next).catch(()=>{});return next;});
+  },[collection.progression]);
+  const lastCollectionRefresh = useRef(0);
+  useEffect(() => { if (collection.ready) setRisePointsBalance(collection.balance); }, [collection.balance, collection.ready]);
+  useEffect(() => { setMotionPreference(userProfile?.preferences?.reducedSensory); }, [userProfile?.preferences?.reducedSensory]);
+  useEffect(() => { lastCollectionRefresh.current = 0; }, [userProfile?.id, userProfile?.email]);
   useEffect(() => {
-    GoogleSignin.configure({
-      webClientId: '628709146989-df1prq7ube4v3383tg8gfe4ha3asrtb6.apps.googleusercontent.com',
-      iosClientId: '628709146989-2cgc85rvqm0c3ltnmod9slvtiqfb0okf.apps.googleusercontent.com',
-      offlineAccess: true,
-      scopes: ['profile', 'email']
-    });
-  }, []);
-
-  // Existing State
-  const [alarms, setAlarms] = useState([]);
-  const [userStats, setUserStats] = useState({
-    level: 1,
-    experience: 0,
-    streak: 0,
-    totalWakeUps: 0,
-    challengesCompleted: 0,
-    snoozesUsed: 0,
-    lastWakeUpAt: null,
-    lastChallengeAt: null,
-    lastSnoozeAt: null,
-  });
-  
-  // Modal States
-  const [showCreateAlarm, setShowCreateAlarm] = useState(false);
-  const [editingAlarm, setEditingAlarm] = useState(null);
-  const [showMiniGame, setShowMiniGame] = useState(false);
-  const [showEnhancedAlarm, setShowEnhancedAlarm] = useState(false);
-  const [showPremiumModal, setShowPremiumModal] = useState(false);
-  const [showRisePoints, setShowRisePoints] = useState(false);
-  const [showCosmeticStore, setShowCosmeticStore] = useState(false);
-  const [showPaymentTest, setShowPaymentTest] = useState(false);
-  const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
-  const [userRole, setUserRole] = useState('USER');
-  const [showTermsAndConditions, setShowTermsAndConditions] = useState(false);
-  const [showSupportCenter, setShowSupportCenter] = useState(false);
-  const [upgradeSource, setUpgradeSource] = useState('general');
-  const [currentActiveAlarm, setCurrentActiveAlarm] = useState(null);
-  const closedAlarmUntilRef = useRef(new Map());
-  const [currentGameType, setCurrentGameType] = useState('math');
-  const [subscription, setSubscription] = useState(null);
-
-  // Alarm challenge takeover state
-  const [challengeLockActive, setChallengeLockActive] = useState(false);
-  const [challengeGiveUpEnabledAt, setChallengeGiveUpEnabledAt] = useState(0);
-  const alarmActionBusyRef = useRef(false);
-  const notificationConfiguredRef = useRef(false);
-
-  const [stripePublishableKey, setStripePublishableKey] = useState(null);
-
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [risePointsBalance, setRisePointsBalance] = useState(null);
-
-  const [mustSetPassword, setMustSetPassword] = useState(false);
-  const [passwordBusy, setPasswordBusy] = useState(false);
-  const [passwordNew, setPasswordNew] = useState('');
-  const [passwordConfirm, setPasswordConfirm] = useState('');
-
-  const [homeWeather, setHomeWeather] = useState(null);
-  const [homeWeatherLoading, setHomeWeatherLoading] = useState(false);
-  const homeWeatherLastFetchRef = useRef(0);
-
-  const [appThemeId, setAppThemeId] = useState(null);
+    if (!isAuthenticated || isGuest || Date.now() - lastCollectionRefresh.current < 30000) return;
+    lastCollectionRefresh.current = Date.now();
+    refreshCollection().catch(() => {});
+  }, [isAuthenticated, isGuest, userProfile?.id, userProfile?.email, currentScreen]);
   const adsSuppressed = Boolean(currentActiveAlarm || challengeLockActive || showCreateAlarm || showMiniGame ||
     showEnhancedAlarm || showPremiumModal || showRisePoints || showCosmeticStore || showPaymentTest ||
-    showAdminPanel || showTermsAndConditions || showSupportCenter || showProfileModal || mustSetPassword);
+    showAdminPanel || showTermsAndConditions || showSupportCenter || showProfileModal || mustSetPassword || welcome);
+  companionRuntime.current = {
+    owner:isAuthenticated && !isGuest ? userProfile?.id || userProfile?.email : null, alarms,
+    ready:isAuthenticated && !isGuest && !needsOnboarding && !mustSetPassword && !adsSuppressed && !['loading','start','auth','onboarding'].includes(currentScreen),
+  };
+  const welcomeAccount = userProfile?.id || userProfile?.email;
+  useEffect(() => {welcomeChecked.current=null;setWelcome(null);},[welcomeAccount]);
+  useEffect(() => {
+    if(!isAuthenticated||isGuest||needsOnboarding||currentScreen!=='home'||!welcomeAccount||welcomeChecked.current===welcomeAccount)return;
+    let live=true;welcomeChecked.current=welcomeAccount;
+    featureApi('/api/welcome/status',{}).then(data=>{
+      if(!live)return;
+      if(data.profileComplete&&(data.pending||freshWelcome))setWelcome({...data,account:welcomeAccount});
+      setFreshWelcome(false);
+      if(data.bonus)refreshCollection().catch(()=>{});
+    }).catch(()=>{if(live)welcomeChecked.current=null;});
+    return()=>{live=false;};
+  },[isAuthenticated,isGuest,needsOnboarding,currentScreen,welcomeAccount,freshWelcome]);
+  const finishWelcome = async startTrial => {
+    const result=await featureApi('/api/welcome/complete',{startTrial});
+    setWelcome(null);setFreshWelcome(false);
+    if(typeof result.balance==='number')setRisePointsBalance(result.balance);
+    refreshCollection().catch(()=>{});
+    MonetizationService.getUserSubscription({force:true}).then(setSubscription).catch(()=>{});
+  };
+  const skipWelcome = () => {setWelcome(null);setFreshWelcome(false);finishWelcome(false).catch(()=>{});};
   const cosmeticCheckoutRef = useRef(false);
   useEffect(() => { if (showCosmeticStore) cosmeticCheckoutRef.current = false; }, [showCosmeticStore]);
   const transitionAds = useTransitionAds({
     account: userProfile?.email, guest: isGuest, premium: subscription?.tier !== 'free', ageBand: userProfile?.ageBand,
     blocked: Boolean(currentActiveAlarm || challengeLockActive || showCreateAlarm || showEnhancedAlarm || showPremiumModal ||
-      showRisePoints || showPaymentTest || showAdminPanel || showTermsAndConditions || showSupportCenter || showProfileModal || mustSetPassword),
+      showRisePoints || showPaymentTest || showAdminPanel || showTermsAndConditions || showSupportCenter || showProfileModal || mustSetPassword || welcome),
     nextAlarmAt: () => Math.min(...alarms.filter(a => a.isEnabled !== false).map(a => computeNextTrigger(a).getTime())),
   }, showMiniGame ? 'standalone_game_complete' : showCosmeticStore ? 'cosmetics_browse_done' : null);
   const finishCosmeticBrowsing = () => {
@@ -356,29 +446,7 @@ export default function App() {
     setShowAdminPanel(true);
   };
 
-  useEffect(() => {
-    // Load equipped theme for minimal global theming (gradients).
-    AsyncStorage.getItem('risequest_app_theme_id')
-      .then((id) => setAppThemeId(id ? String(id) : null))
-      .catch(() => {});
-  }, []);
-
-  const getThemeGradient = (themeId) => {
-    switch (String(themeId || '')) {
-      case 'theme_nature':
-      case 'theme_zen':
-        return ['#48bb78', '#38a169'];
-      case 'theme_urban':
-        return ['#feca57', '#ff9ff3'];
-      case 'theme_space':
-      case 'theme_ocean':
-        return ['#667eea', '#764ba2'];
-      default:
-        return ['#FF7A00', '#FFC83D'];
-    }
-  };
-
-  const appGradient = getThemeGradient(appThemeId);
+  const appGradient = collection.inventory.find(item => item.id === appThemeId)?.design?.gradient || getThemeGradient(appThemeId);
 
   // Administrative navigation must not trust the locally cached role alone.
   useEffect(() => {
@@ -404,6 +472,21 @@ export default function App() {
     return () => { active = false; clearTimeout(timeout); controller.abort(); };
   }, [isAuthenticated, isGuest, userProfile?.id, currentScreen === 'more']);
 
+  useEffect(() => {
+    let active = true;
+    setCompanionCharacter('sol');
+    const owner = userProfile?.id || userProfile?.email || 'guest';
+    (async () => {
+      try {
+        const saved = JSON.parse(await AsyncStorage.getItem(`risequest_companion:${owner}`));
+        if (!saved?.character) return;
+        const catalog = isGuest ? {avatars:[{id:'sol',unlocked:true},{id:'fern',unlocked:true}]} : await featureApi('/api/companions');
+        if (active && catalog.avatars.some(a => a.id === saved.character && a.unlocked)) setCompanionCharacter(saved.character);
+      } catch (_) {}
+    })();
+    return () => { active = false; };
+  }, [userProfile?.id, userProfile?.email, isGuest, subscription?.tier]);
+
   const loadHomeWeather = async ({ force = false } = {}) => {
     const now = Date.now();
     const last = homeWeatherLastFetchRef.current || 0;
@@ -414,6 +497,7 @@ export default function App() {
     try {
       const data = await WeatherService.getCurrentWeather({ requestPermission: force });
       setHomeWeather(data);
+      if(data?.error)homeWeatherLastFetchRef.current=0;
     } catch (e) {
       setHomeWeather({ error: e?.message || 'Could not fetch weather data' });
     } finally {
@@ -595,18 +679,15 @@ export default function App() {
       });
     } catch (e) {
       console.warn('Schedule alarm failed:', e);
-      if (Platform.OS === 'ios') throw e;
+      throw e;
     }
   };
 
   const cancelAlarmNotification = (alarm) => {
+    NativeModules.RiseQuestAlarmAudio?.stopSmartWake?.().catch(() => {});
     if (Platform.OS === 'ios') return NativeModules.RiseQuestAlarmAudio.cancel(String(alarm?.id));
-    try {
-      const notificationId = Number(alarm?.notificationId) || toNotificationIntId(alarm?.id);
-      PushNotification.cancelLocalNotification(notificationId);
-    } catch (_) {
-      // ignore
-    }
+    const notificationId = Number(alarm?.notificationId) || toNotificationIntId(alarm?.id);
+    PushNotification.cancelLocalNotification(notificationId);
   };
 
   const postAlarmEvent = async (type, alarm, metadata = {}) => {
@@ -660,6 +741,9 @@ export default function App() {
         },
         onNotification: function (notification) {
           try {
+            const care=notification?.data?.kind==='companion-care'?notification.data:notification?.userInfo?.kind==='companion-care'?notification.userInfo:null;
+            if(care){if(care.owner===companionRuntime.current.owner&&notification.userInteraction&&!alarmActionBusyRef.current)handleNavChange(care.screen==='checkin'?'checkin':'care');return;}
+            if(notification?.data?.kind==='sleep-reminder'||notification?.userInfo?.kind==='sleep-reminder')return;
             if (alarmActionBusyRef.current) return;
             const rawId = notification?.id || notification?.data?.id || notification?.userInfo?.alarmId;
             const alarmId = notification?.userInfo?.alarmId || notification?.data?.alarmId || rawId;
@@ -1106,9 +1190,9 @@ export default function App() {
         if (
           resp.status === 401 &&
           String(data?.error || '').toLowerCase().includes('invalid') &&
-          String(identifier || '').trim().toLowerCase() === 'admin@goldenepics.com'
+          String(identifier || '').trim().toLowerCase() === 'owner@example.invalid'
         ) {
-          throw new Error('Invalid credentials. If this is the admin account, the backend may need admin bootstrap enabled.');
+          throw new Error('Email or password is incorrect. Use Forgot password if you need to reset it.');
         }
         throw new Error(data?.error || 'Login failed');
       }
@@ -1287,6 +1371,7 @@ export default function App() {
   };
 
   const handleGoogleSignIn = async () => {
+    setAuthError(null);
     if ((authMode === 'signup' || showGoogleAgeScreen) && !canRegister(registrationAgeBand, registrationCountry)) {
       setShowGoogleAgeScreen(true);
       setAuthError('Please select your age and country before continuing. A parent manages profiles where required.');
@@ -1368,10 +1453,32 @@ export default function App() {
         setShowAuthInline(false);
     } catch (error) {
       console.error('Google auth error:', error);
-      const message = error?.message ? String(error.message) : 'Failed to sign in with Google.';
-      const codeSuffix = error?.code ? `\n\nCode: ${String(error.code)}` : '';
-      Alert.alert('Authentication Error', `${message}${codeSuffix}`);
+      setAuthError('Google sign-in is unavailable right now. Please try again later or use another sign-in method.');
     }
+  };
+
+  const [goldenPending, setGoldenPending] = useState(false);
+  useEffect(() => () => cancelGoldenSignIn(), []);
+  const handleGoldenSignIn = async () => {
+    if (authBusy) return;
+    if ((authMode === 'signup' || showGoogleAgeScreen) && !canRegister(registrationAgeBand, registrationCountry)) {
+      setShowGoogleAgeScreen(true); return;
+    }
+    setAuthBusy(true); setGoldenPending(true); setAuthError(null);
+    try {
+      const result = await signInWithGoldenEpics({ ageBand: registrationAgeBand, countryCode: registrationCountry });
+      await riseQuestWalletService.clearCache();
+      await saveAuthSession({ userId: result.user.id, email: result.user.email, token: result.token });
+      await saveUserRole(result.user.role || 'USER');
+      await riseQuestWalletService.initializeForUser(result.user.id, result.token);
+      const restored = await UserProfileService.restoreForAccount(result.user);
+      setUserProfile(restored); setIsAuthenticated(true); setIsGuest(false);
+      setNeedsOnboarding(!restored.onboardingCompleted);
+      setCurrentScreen(restored.onboardingCompleted ? 'home' : 'onboarding'); setShowAuthInline(false);
+    } catch (error) {
+      if (error.code === 'AGE_SCREEN_REQUIRED') setShowGoogleAgeScreen(true);
+      if (error.code !== 'CANCELED') setAuthError(error.message || 'Please try again.');
+    } finally { setAuthBusy(false); setGoldenPending(false); }
   };
 
   const handleAppleSignIn = async () => {
@@ -1408,6 +1515,7 @@ export default function App() {
       } catch (_) {
         // ignore
       }
+      welcomeChecked.current=null;setFreshWelcome(true);
       setUserProfile(completedProfile);
       setIsAuthenticated(true);
       setNeedsOnboarding(false);
@@ -1418,18 +1526,20 @@ export default function App() {
       await initializeMonetization();
       await PaymentService.initializePayments();
       
-      Alert.alert(
-        'Welcome to RiseQuest! 🎉',
-        'Your personalized experience is ready. Let\'s start your journey to better mornings!'
-      );
+
     } catch (error) {
       console.error('Onboarding completion error:', error);
       Alert.alert('Error', 'Failed to complete setup. Please try again.');
     }
   };
 
+  const signOutBusyRef = useRef(false);
   const signOut = async () => {
+    if (signOutBusyRef.current) return;
+    signOutBusyRef.current = true;
     try {
+      stopVoiceConversation();
+      cancelGoldenSignIn();
       await clearAuthToken();
       await AsyncStorage.multiRemove([
         'auth_token',
@@ -1442,26 +1552,43 @@ export default function App() {
         'risequest_user_role',
       ]);
       await riseQuestWalletService.clearCache();
-      setUserProfile(null);
-      setIsAuthenticated(false);
-      setIsGuest(false);
-      setUserRole('USER');
-      setCurrentScreen('start');
-      setSubscription(null);
-      setUserStats({
-        level: 1,
-        experience: 0,
-        streak: 0,
-        totalWakeUps: 0,
-        challengesCompleted: 0,
-        snoozesUsed: 0,
-        lastWakeUpAt: null,
-        lastChallengeAt: null,
-        lastSnoozeAt: null,
+      // One render transition: no signed-in child sees a cleared profile.
+      unstable_batchedUpdates(() => {
+        setCurrentScreen('start');
+        previousScreenRef.current = 'start';
+        screenHistoryRef.current = [];
+        setShowProfileModal(false); setShowSupportCenter(false);
+        setShowCosmeticStore(false); setShowAdminPanel(false); setShowPaymentTest(false);
+        setShowPremiumModal(false); setShowRisePoints(false); setShowCreateAlarm(false);
+        setShowTermsAndConditions(false); setShowForgotPassword(false); setMustSetPassword(false);
+        setWelcome(null); setFreshWelcome(false); welcomeChecked.current = null;
+        setNeedsOnboarding(false); setVerifiedAdminRole(false); setIsAdminAuthenticated(false);
+        setShowGoogleAgeScreen(false); setRegistrationAgeBand(null); setRegistrationCountry(null);
+        setAuthPassword(''); setAuthConfirm(''); setPasswordNew(''); setPasswordConfirm('');
+        setForgotToken(''); setForgotNewPassword(''); setForgotConfirmPassword('');
+        setAuthError(null); setAuthMode('login'); setShowAuthInline(true);
+        setAuthShowPassword(false); setAuthShowConfirm(false); setRisePointsBalance(null);
+        setUserProfile(null);
+        setIsAuthenticated(false);
+        setIsGuest(false);
+        setUserRole('USER');
+        setSubscription(null);
+        setUserStats({
+          level: 1,
+          experience: 0,
+          streak: 0,
+          totalWakeUps: 0,
+          challengesCompleted: 0,
+          snoozesUsed: 0,
+          lastWakeUpAt: null,
+          lastChallengeAt: null,
+          lastSnoozeAt: null,
+        });
       });
     } catch (error) {
       console.error('Sign out error:', error);
-    }
+      Alert.alert('Could not sign out', 'Please try again. Your saved alarms are unchanged.');
+    } finally { signOutBusyRef.current = false; }
   };
 
   const initializeMonetization = async () => {
@@ -1473,12 +1600,7 @@ export default function App() {
       // Check trial expiry
       await MonetizationService.checkTrialExpiry();
       
-      // Show onboarding for new users
-      if (!sub.trialUsed && sub.tier === MonetizationService.TIERS.FREE) {
-        setTimeout(() => {
-          MonetizationService.initializeNewUser();
-        }, 2000); // Show after 2 seconds
-      }
+
     } catch (error) {
       console.error('Error initializing monetization:', error);
     }
@@ -1545,7 +1667,9 @@ export default function App() {
       }
       
       if (savedStats) {
-        const parsed = JSON.parse(savedStats);
+        const stored = JSON.parse(savedStats);
+        const owner=userProfile?.id||userProfile?.email||'guest';
+        const parsed=stored.owner===owner?stored:{};
         setUserStats({
           level: 1,
           experience: 0,
@@ -1556,7 +1680,7 @@ export default function App() {
           lastWakeUpAt: null,
           lastChallengeAt: null,
           lastSnoozeAt: null,
-          ...parsed,
+          ...parsed, experience:legacyTotal(parsed),level:levelProgress(legacyTotal(parsed)).level,xpVersion:2,
         });
       }
     } catch (error) {
@@ -1565,23 +1689,13 @@ export default function App() {
   };
 
   const deleteAlarm = async (alarmId) => {
-    // Cancel notification (use stored notificationId when present)
     const alarm = alarms.find(a => String(a.id) === String(alarmId));
-    if (alarm) {
-      cancelAlarmNotification(alarm);
-    } else {
-      try {
-        PushNotification.cancelLocalNotification(toNotificationIntId(alarmId));
-      } catch (_) {
-        // ignore
-      }
-    }
-    
-    // Remove from state and storage
-    const updatedAlarms = alarms.filter(alarm => alarm.id !== alarmId);
+    if (!alarm) throw new Error('This alarm no longer exists.');
+    const updatedAlarms = await persistAlarmDelete(alarms, alarm.id, {
+      persist: items => AsyncStorage.setItem('risequest_alarms', JSON.stringify(items)),
+      cancel: cancelAlarmNotification, schedule: scheduleAlarmNotification,
+    });
     setAlarms(updatedAlarms);
-    await AsyncStorage.setItem('risequest_alarms', JSON.stringify(updatedAlarms));
-    
     AccessibilityInfo.announceForAccessibility('Alarm deleted.');
   };
 
@@ -1612,6 +1726,7 @@ export default function App() {
       if ((closedAlarmUntilRef.current.get(alarmKey) || 0) > Date.now()) return;
       closedAlarmUntilRef.current.set(alarmKey, Date.now() + 10000);
       NativeModules.RiseQuestAlarmAudio?.stop(String(alarmForEvent.id));
+      NativeModules.RiseQuestAlarmAudio?.stopSmartWake?.().catch(() => {});
       // Audio and both overlays must stop before storage/network bookkeeping.
       setShowMiniGame(false);
       setShowEnhancedAlarm(false);
@@ -1622,7 +1737,10 @@ export default function App() {
       if (action === 'snooze') {
         await scheduleAlarmNotification({ ...alarmForEvent, repeatDaily: false }, new Date(Date.now() + 5 * 60 * 1000));
       } else if (alarmForEvent.repeatDaily) {
-        await scheduleAlarmNotification(alarmForEvent);
+        // An early smart wake must not ring again at today's fixed deadline.
+        const next = computeNextTrigger(alarmForEvent);
+        if (next.toDateString() === new Date().toDateString()) next.setDate(next.getDate() + 1);
+        await scheduleAlarmNotification(alarmForEvent, next);
       } else {
         const updatedAlarms = alarms.map(item => String(item.id) === String(alarmForEvent.id) ? { ...item, isEnabled: false } : item);
         setAlarms(updatedAlarms);
@@ -1642,13 +1760,13 @@ export default function App() {
         ...userStats,
         totalWakeUps: userStats.totalWakeUps + 1,
         streak: wakeDay.streak,
-        experience: userStats.experience + 50,
-        level: Math.floor((userStats.experience + 50) / 100) + 1,
+        experience: userStats.experience + (wakeDay.newDay ? 10 : 0),
+        level: levelProgress(userStats.experience + (wakeDay.newDay ? 10 : 0)).level,
         lastWakeUpAt: new Date().toISOString(),
       };
       
-      // Award RisePoints for successful wake-up
-      if (!isGuest) {
+      // One wake reward per day; the backend also enforces receipts and a daily cap.
+      if (!isGuest && wakeDay.newDay) {
         await MonetizationService.addRisePoints(
           MonetizationService.RISE_POINT_REWARDS.DAILY_WAKEUP,
           'waking up on time'
@@ -1679,7 +1797,8 @@ export default function App() {
       }
       
       updateUserStats(newStats);
-      AccessibilityInfo.announceForAccessibility('Alarm stopped.');
+      AccessibilityInfo.announceForAccessibility('Alarm stopped. Your daily routine is ready.');
+      setCurrentScreen('routine');
       Promise.resolve().then(() => refreshRisePointsBalance()).catch(() => {});
     } else if (action === 'snooze') {
       await postAlarmEvent('snooze', alarmForEvent, { source: 'enhanced_alarm' });
@@ -1708,6 +1827,7 @@ export default function App() {
       
       setShowCreateAlarm(false);
       setEditingAlarm(null);
+      setAlarmDraft(null);
       AccessibilityInfo.announceForAccessibility(result.existing ? 'Alarm updated.' : 'Alarm created.');
     } catch (error) {
       console.error('Error saving alarm:', error);
@@ -1716,8 +1836,12 @@ export default function App() {
   };
 
   const updateUserStats = async (newStats) => {
-    setUserStats(newStats);
-    await AsyncStorage.setItem('risequest_stats', JSON.stringify(newStats));
+    const owner=userProfile?.id||userProfile?.email||'guest';
+    const next={...newStats,owner,xpVersion:2};
+    if(!isGuest&&collection.progression){next.experience=collection.progression.totalXp;next.level=collection.progression.level;next.serverXp=true;}
+    setUserStats(next);
+    await saveProgress(AsyncStorage,next);
+    if(!isGuest)refreshCollection().catch(()=>{});
   };
 
   const handleNavChange = (screen) => {
@@ -1728,18 +1852,75 @@ export default function App() {
     setCurrentScreen(screen);
   };
 
+  const companionOwner = isAuthenticated && !isGuest ? userProfile?.id || userProfile?.email : null;
+  const companionManager = createCompanionManager({
+    owner:companionOwner,
+    isCurrent:()=>AppState.currentState==='active' && companionRuntime.current.owner===companionOwner && companionRuntime.current.ready,
+    getAlarms:()=>companionRuntime.current.alarms,
+    listQuests:()=>QuestService.getUserQuests(companionOwner),
+    removeQuest:async id=>{await QuestService.deleteQuest(id);setQuestRevision(n=>n+1);},
+    removeAlarm:alarm=>deleteAlarm(alarm.id),
+    updateAlarm:async (alarm,changes)=>{
+      if ((changes.time || changes.isEnabled===true) && alarm.isEnabled!==false && !await ensureAlarmPermissions()) throw new Error('Allow alarm permissions, then ask again.');
+      if (changes.isEnabled===true && alarm.isEnabled===false && !await ensureAlarmPermissions()) throw new Error('Allow alarm permissions, then ask again.');
+      const runtime=companionRuntime.current;
+      if(runtime.owner!==companionOwner || !runtime.ready)throw new Error('Your account or screen changed. Please ask again.');
+      const current=runtime.alarms.find(a=>String(a.id)===String(alarm.id));
+      if(JSON.stringify(current)!==JSON.stringify(alarm))throw new Error('That alarm changed. Please ask again.');
+      const result=prepareAlarmSave(runtime.alarms,{...alarm,...changes},alarm.id);
+      await persistAlarmEdit(result,{
+        persist:items=>AsyncStorage.setItem('risequest_alarms',JSON.stringify(items)),
+        cancel:cancelAlarmNotification,schedule:scheduleAlarmNotification,
+      });
+      setAlarms(result.alarms);
+    },
+    getCollection:refreshCollection,
+    quote:body=>featureApi('/api/cosmetics/quote',body),
+    buy:(path,body)=>changeCollection(path,body),
+    equip:async (body,item)=>{
+      if(body.slot==='soundId' && body.itemId)await prepareCollectionSound(item);
+      if(companionRuntime.current.owner!==companionOwner || !companionRuntime.current.ready)throw new Error('Your account or screen changed. Please ask again.');
+      await changeCollection('equip',body);
+      if(companionRuntime.current.owner!==companionOwner)throw new Error('Your account changed. Please check your collection.');
+      if(body.slot==='soundId' && body.itemId)await applyCollectionSound(item,companionOwner);
+      if(body.slot==='soundId' && !body.itemId)await clearCollectionSound(companionOwner);
+    },
+  });
+  const careManager=createCareManager({isCurrent:()=>AppState.currentState==='active'&&companionRuntime.current.owner===companionOwner&&companionRuntime.current.ready,
+    readNote:body=>playReading(body.slice(0,3000),null)});
+  useEffect(() => registerCompanionActions({
+    owner: isAuthenticated && !isGuest ? userProfile?.id || userProfile?.email : null,
+    canExecute: () => {
+      if (!isAuthenticated || isGuest || needsOnboarding || mustSetPassword || ['loading','start','auth','onboarding'].includes(currentScreen)) return 'Finish signing in and setting up your profile first.';
+      if (currentActiveAlarm || challengeLockActive) return 'Finish your alarm challenge first.';
+      if (adsSuppressed) return 'Finish or close the current panel, then say yes to continue.';
+      return true;
+    },
+    navigate: ({screen}) => {
+      Keyboard.dismiss();
+      if (screen === 'shop') setShowCosmeticStore(true);
+      else if (screen === 'premium') {setUpgradeSource('companion');setShowPremiumModal(true);}
+      else if (screen === 'profile') setShowProfileModal(true);
+      else if (screen === 'support') setShowSupportCenter(true);
+      else handleNavChange(screen);
+      return `Opening ${companionDestinations[screen][0]}.`;
+    },
+    alarm: proposal => {
+      Keyboard.dismiss();setEditingAlarm(null);setAlarmDraft({time:proposal.time,label:proposal.label});setShowCreateAlarm(true);
+      return `Your ${proposal.time} alarm draft is ready. Review its settings and tap Save.`;
+    },
+    quest: async action => {
+      const quest = await QuestService.createQuest({userId:userProfile?.id||userProfile?.email,title:action.title,description:action.description,difficulty:'easy'});
+      setQuestRevision(n=>n+1);
+      return quest.syncStatus==='local-only'?'Saved a local quest draft. Connect later to sync it.':'Your quest and its first steps are ready.';
+    },
+    prepare:(request,id)=>request.operation?.startsWith('care_')?careManager.prepare(request,id):companionManager.prepare(request,id),
+    care:careManager.execute,
+    manage:companionManager.execute,
+  }));
+
   const handleGameStart = async (gameType) => {
-    // Check if user has access to this mini-game
-    const hasAccess = await MonetizationService.checkFeatureAccess(
-      MonetizationService.PREMIUM_FEATURES.UNLIMITED_MINI_GAMES
-    );
-    
-    if (!hasAccess && gameType !== 'math') {
-      // Show upsell for locked mini-games
-      await MonetizationService.triggerUpsell('locked_mini_game', { gameType });
-      return;
-    }
-    
+    // Original games are free at every entry point. New adaptive games gate themselves.
     setCurrentGameType(gameType);
     setShowMiniGame(true);
   };
@@ -1761,7 +1942,7 @@ export default function App() {
     const newStats = {
       ...userStats,
       experience: userStats.experience + score * 10,
-      totalWakeUps: userStats.totalWakeUps + 1,
+      totalWakeUps: userStats.totalWakeUps,
       challengesCompleted: (userStats.challengesCompleted || 0) + 1,
       lastChallengeAt: new Date().toISOString(),
     };
@@ -1772,13 +1953,8 @@ export default function App() {
       'completing mini-game challenge'
     )).catch(() => {});
     
-    // Level up if enough experience
-    if (newStats.experience >= newStats.level * 100) {
-      newStats.level += 1;
-      newStats.experience = newStats.experience - (newStats.level - 1) * 100;
-      Alert.alert('Level Up! 🎉', `You reached level ${newStats.level}!`);
-    }
-    
+    newStats.level = levelProgress(newStats.experience).level;
+    newStats.xpVersion = 2;
     updateUserStats(newStats);
     if (newStats.level === userStats.level) transitionAds.trigger('standalone_game_complete');
     setShowMiniGame(false);
@@ -1849,20 +2025,14 @@ export default function App() {
           {userProfile?.photoUrl ? <Image source={{ uri: userProfile.photoUrl }} style={chromeStyles.avatarImage} /> : <Text style={chromeStyles.initial}>{(userProfile?.displayName || 'R').slice(0, 1).toUpperCase()}</Text>}
         </TouchableOpacity>
       </View>
-      {currentScreen === 'home' && <View style={chromeStyles.chips}>
-        <Text style={[chromeStyles.chip, { backgroundColor: sunrise.purpleTint }]}>Level {userStats.level}</Text>
-        <Text style={[chromeStyles.chip, { backgroundColor: sunrise.tealTint }]}>{userStats.streak} day streak</Text>
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Rise Points, open wallet" onPress={() => handleNavChange('wallet')} style={[chromeStyles.chipButton, { backgroundColor: sunrise.orangeTint }]}>
-          <Text style={chromeStyles.chipText}>{(risePointsBalance ?? subscription?.risePoints) || 0} Rise Points</Text>
-        </TouchableOpacity>
-      </View>}
+      {currentScreen === 'home' && <ProgressCard progress={currentProgress} loginStreak={currentProgress.loginStreak||0} points={risePointsBalance} onWallet={()=>handleNavChange('wallet')} onProgress={()=>setCurrentScreen('stats')}/>}
     </View>
   );
 
   const Navigation = () => {
     const section = ['sleep', 'coach'].includes(currentScreen) ? 'wellness'
       : primaryScreens.includes(currentScreen) ? currentScreen : 'more';
-    return <View style={chromeStyles.navigation} accessibilityRole="tablist">
+    return <View onLayout={event => setNavigationHeight(event.nativeEvent.layout.height)} style={chromeStyles.navigation} accessibilityRole="tablist">
       {[
         ['home', 'today', 'Today'], ['wellness', 'wellness', 'Wellness'],
         ['quests', 'quests', 'Quests'], ['community', 'community', 'Community'],
@@ -1870,7 +2040,7 @@ export default function App() {
       ].map(([screen, icon, label]) => {
         const selected = section === screen;
         return <TouchableOpacity key={screen} testID={`navigation-${screen}`} style={chromeStyles.tab} accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{ selected }} onPress={() => handleNavChange(screen)}>
-          <View style={[chromeStyles.tabIcon, selected && { backgroundColor: sunrise.orangeTint }]}><SunriseIcon name={icon} size={22} color={selected ? '#994500' : sunrise.muted} /></View>
+          <View style={[chromeStyles.tabIcon, selected && { backgroundColor: sunrise.orangeTint }]}><MotionIcon active={selected}><SunriseIcon name={icon} size={22} color={selected ? '#994500' : sunrise.muted} /></MotionIcon></View>
           <Text style={[chromeStyles.tabLabel, selected && { color: '#994500', fontWeight: '800' }]}>{label}</Text>
         </TouchableOpacity>;
       })}
@@ -1881,6 +2051,7 @@ export default function App() {
     <ScrollView style={ui.page} contentContainerStyle={ui.pageContent}>
       <Text style={[ui.title, { marginBottom: 6 }]}>Make RiseQuest yours</Text>
       <Text style={[ui.subtitle, { marginBottom: 20 }]}>Your tools, rewards, and settings in one place.</Text>
+      {(verifiedAdminRole || ['STAFF','ADMIN','SUPERADMIN'].includes(userRole)) && <View style={[ui.card,{paddingHorizontal:18,borderColor:sunrise.orange}]}><ToolRow icon="shield" title="Admin dashboard" subtitle="Users, analytics, economy and theme studio" tint={sunrise.orangeTint} color="#994500" onPress={() => setCurrentScreen('admin')}/></View>}
       <View style={[ui.card, { paddingHorizontal: 18 }]}>
         <ToolRow icon="wallet" title="Wallet" subtitle="Rise Points, purchases, and balances" onPress={() => handleNavChange('wallet')} tint={sunrise.orangeTint} color="#994500" />
         <ToolRow icon="star" title="Premium" subtitle="Your plan and upgrade options" onPress={() => { setUpgradeSource('more'); setShowPremiumModal(true); }} />
@@ -1888,7 +2059,11 @@ export default function App() {
       </View>
       <View style={[ui.card, { paddingHorizontal: 18 }]}>
         <ToolRow icon="alarm" title="Alarms" onPress={() => setCurrentScreen('alarms')} />
-        <ToolRow icon="games" title="Challenge mini-games" onPress={() => setCurrentScreen('mini-games')} />
+        <ToolRow icon="coach" title="Meet your companion" subtitle="Voice, personalities and companion shop" onPress={() => setCurrentScreen('companion')} />
+        <ToolRow icon="sleep" title="Smart wake window" subtitle="Optional movement-assisted timing" onPress={() => setCurrentScreen('smart-wake')} />
+        <ToolRow icon="today" title="Daily routine & briefing" onPress={() => setCurrentScreen('routine')} />
+        <ToolRow icon="games" title="Adaptive mind practice" subtitle="Included with Premium" onPress={() => setCurrentScreen('brain-training')} />
+        <ToolRow icon="games" title="Original mini-games · free" onPress={() => setCurrentScreen('mini-games')} />
         <ToolRow icon="location" title="Smart location" onPress={() => setCurrentScreen('location')} tint={sunrise.blueTint} color="#1672A6" />
         <ToolRow icon="shield" title="Wake buddies & emergency tools" onPress={() => setCurrentScreen('social')} tint={sunrise.tealTint} color="#087C70" />
       </View>
@@ -1897,7 +2072,7 @@ export default function App() {
         {userProfile?.ageGroup === 'adult' && <ToolRow icon="community" title="Family profiles" subtitle="Parent consent, private child profiles and controls" onPress={() => setCurrentScreen('family')} />}
         {userProfile?.authProvider === 'child' && <ToolRow icon="shield" title="Return to parent sign-in" onPress={signOut} />}
         <ToolRow icon="support" title="Help & support" onPress={() => setShowSupportCenter(true)} />
-        {verifiedAdminRole && <ToolRow icon="shield" title="Administration" subtitle="Authorized account tools" onPress={() => setCurrentScreen('admin')} />}
+
         {verifiedAdminRole && ['ADMIN', 'SUPERADMIN'].includes(userRole) && <ToolRow icon="shield" title="Parent consent reviews" onPress={() => setCurrentScreen('family-review')} />}
       </View>
       {!adsSuppressed && <DiscreetAd account={userProfile?.email} guest={isGuest} premium={subscription?.tier && subscription.tier !== 'free'} optionalInlineAds={userProfile?.preferences?.optionalInlineAds === true} placement="more_banner" />}
@@ -2089,16 +2264,18 @@ export default function App() {
                       </Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={styles.googleSignInButtonAlt}
-                      onPress={handleGoogleSignIn}
-                      disabled={authBusy}
-                    >
-                      <Text style={styles.googleSignInTextAlt}>Continue with Google</Text>
-                    </TouchableOpacity>
-                    {Platform.OS === 'ios' && appleAuth.isSupported && <AppleButton
-                      buttonStyle={AppleButton.Style.BLACK} buttonType={AppleButton.Type.CONTINUE}
-                      style={{ width: '100%', height: 48, marginTop: 12 }} onPress={handleAppleSignIn} />}
+                    <Text style={{textAlign:'center',color:sunrise.muted,marginTop:18,marginBottom:10}}>Or continue with</Text>
+                    <View style={{flexDirection:'row',justifyContent:'center',alignItems:'center',gap:18}}>
+                      <GoogleSigninButton size={GoogleSigninButton.Size.Icon} color={GoogleSigninButton.Color.Light}
+                        accessibilityLabel="Continue with Google" onPress={handleGoogleSignIn} disabled={authBusy} style={{width:64,height:64}}/>
+                      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Continue with GoldenEpics" disabled={authBusy} onPress={handleGoldenSignIn}
+                        style={{width:64,height:64,borderRadius:16,borderWidth:1,borderColor:sunrise.border,backgroundColor:'#FFFFFF',alignItems:'center',justifyContent:'center',opacity:authBusy ? .5 : 1}}>
+                        <GoldenEpicsLogo size={36}/>
+                      </TouchableOpacity>
+                      {Platform.OS === 'ios' && appleAuth.isSupported && <TouchableOpacity accessibilityRole="button" accessibilityLabel="Continue with Apple" onPress={handleAppleSignIn} disabled={authBusy}
+                        style={{width:64,height:64,borderRadius:16,backgroundColor:'#000000',alignItems:'center',justifyContent:'center'}}><Text style={{fontSize:34,color:'#FFFFFF'}}></Text></TouchableOpacity>}
+                    </View>
+                    {goldenPending && <TouchableOpacity accessibilityRole="button" style={styles.googleSignInButtonAlt} onPress={cancelGoldenSignIn}><Text style={styles.googleSignInTextAlt}>Cancel GoldenEpics sign-in</Text></TouchableOpacity>}
                     </>}
 
                     <TouchableOpacity
@@ -2125,7 +2302,7 @@ export default function App() {
   const ForgotPasswordModal = () => (
     <Modal
       visible={showForgotPassword}
-      animationType="slide"
+      animationType={modalTransition}
       presentationStyle="pageSheet"
       onRequestClose={() => {
         if (forgotBusy) return;
@@ -2366,11 +2543,11 @@ export default function App() {
 
   const HomeScreen = () => (
     <TodayScreen
-      userProfile={userProfile} isGuest={isGuest} alarms={alarms} stats={userStats}
+      userProfile={userProfile} isGuest={isGuest} alarms={alarms} stats={{...userStats,level:currentProgress.level,experience:currentProgress.totalXp,progression:currentProgress}}
       premium={subscription?.tier && subscription.tier !== 'free'}
       adsSuppressed={adsSuppressed}
       points={(risePointsBalance ?? subscription?.risePoints) || 0}
-      onNavigate={handleNavChange} onCreateAlarm={() => { setEditingAlarm(null); setShowCreateAlarm(true); }}
+      onNavigate={handleNavChange} onCreateAlarm={() => { setEditingAlarm(null); setAlarmDraft(null); setShowCreateAlarm(true); }}
       onRewards={() => setShowRisePoints(true)} onCosmetics={() => setShowCosmeticStore(true)}
       onFocus={() => { setWellnessTab('focus'); setCurrentScreen('wellness'); }}
       weather={homeWeather} weatherLoading={homeWeatherLoading}
@@ -2406,7 +2583,7 @@ export default function App() {
           <Text style={styles.cardTitle}>⏰ Your Alarms</Text>
           <TouchableOpacity
             style={styles.addButton}
-            onPress={() => { setEditingAlarm(null); setShowCreateAlarm(true); }}
+            onPress={() => { setEditingAlarm(null); setAlarmDraft(null); setShowCreateAlarm(true); }}
           >
             <Text style={styles.addButtonText}>+ Add</Text>
           </TouchableOpacity>
@@ -2418,7 +2595,7 @@ export default function App() {
             <Text style={styles.emptySubtext}>Set an alarm to start your RiseQuest journey!</Text>
             <TouchableOpacity
               style={styles.primaryButton}
-              onPress={() => { setEditingAlarm(null); setShowCreateAlarm(true); }}
+              onPress={() => { setEditingAlarm(null); setAlarmDraft(null); setShowCreateAlarm(true); }}
             >
               <Text style={styles.buttonText}>🔔 Set Alarm</Text>
             </TouchableOpacity>
@@ -2563,11 +2740,9 @@ export default function App() {
         <Text style={styles.cardTitle}>📊 Your Progress</Text>
         
         <View style={styles.statCard}>
-          <Text style={styles.statCardTitle}>Level {userStats.level}</Text>
-          <Text style={styles.statCardValue}>{userStats.experience} XP</Text>
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: `${(userStats.experience % 100)}%` }]} />
-          </View>
+          <Text style={styles.statCardTitle}>Level {currentProgress.level}</Text>
+          <Text style={styles.statCardValue}>{currentProgress.totalXp} total XP</Text>
+          <XpBar progress={currentProgress}/>
         </View>
 
         <View style={styles.statsGrid}>
@@ -2584,12 +2759,15 @@ export default function App() {
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>🏆 Achievements</Text>
-        <Text style={styles.cardText}>Coming soon! Earn badges for consistent wake-ups!</Text>
+        <View style={{flexDirection:'row',flexWrap:'wrap',gap:14}}>{collection.inventory.filter(item => (collection.loadout.badgeIds || []).includes(item.id)).map(item => <View key={item.id} style={{alignItems:'center',maxWidth:100}}><Medal item={item} size={65}/><Text style={styles.cardText}>{item.name}</Text></View>)}</View>
+        <Text style={styles.cardText}>{collection.achievements.filter(item => item.earned).length} achievements earned. Explore medals and choose your display in My Items.</Text>
+        <TouchableOpacity accessibilityRole="button" onPress={() => setShowCosmeticStore(true)} style={ui.button}><Text style={ui.buttonText}>Open my collection</Text></TouchableOpacity>
       </View>
     </ScrollView>
   );
 
   const renderScreen = () => {
+    if (!isAuthenticated && !isGuest && !['loading', 'start', 'auth'].includes(currentScreen)) return StartScreen();
     switch (currentScreen) {
       case 'loading':
         return LoadingScreen();
@@ -2623,7 +2801,7 @@ export default function App() {
         return WellnessScreen();
       case 'quests':
         return (
-          <QuestScreen 
+          <QuestScreen key={questRevision}
             userProfile={userProfile}
             onClose={() => setCurrentScreen('home')}
           />
@@ -2654,15 +2832,30 @@ export default function App() {
         return (
           <CommunityAgeBoundary key={userProfile?.email || userProfile?.id || 'guest'}
             userProfile={userProfile}
+            initialTab={communityEntry.tab} entryRequest={communityEntry.request}
             embedded
           />
         );
       case 'advanced-alarms':
         return <AdvancedAlarmFeatures userProfile={userProfile} />;
+      case 'care':
+      case 'notes':
+      case 'checkin':
+        return <SupportScreen key={`${userProfile?.id||userProfile?.email}:${currentScreen}`} owner={isGuest?null:userProfile?.id||userProfile?.email} initialTab={currentScreen==='notes'?'notes':currentScreen==='checkin'?'checkin':'plan'} companion={companionCharacter} onNavigate={handleNavChange} onChanged={()=>setQuestRevision(n=>n+1)}/>;
+      case 'reader':
+        return <ReaderScreen key={userProfile?.id||userProfile?.email} owner={isGuest?null:userProfile?.id||userProfile?.email} onNavigate={handleNavChange}/>;
+      case 'companion':
+        return <CompanionHub key={userProfile?.id || userProfile?.email || 'guest'} userProfile={userProfile} onSelect={setCompanionCharacter} onNavigate={handleNavChange} onClose={() => setCurrentScreen('home')} onAlarm={proposal => {setEditingAlarm(null);setAlarmDraft({time:proposal.time,label:proposal.label});setShowCreateAlarm(true);}} />;
+      case 'smart-wake':
+        return <SmartWakeScreen alarms={alarms} nextTrigger={computeNextTrigger} onNavigate={handleNavChange} onEnsureAlarm={async alarm => {if(!await ensureAlarmPermissions())return false;await scheduleAlarmNotification(alarm);return true;}}/>;
+      case 'routine':
+        return <RoutineScreen key={userProfile?.id || 'guest'} userProfile={userProfile} onNavigate={handleNavChange}/>;
+      case 'brain-training':
+        return <AdaptiveTraining key={userProfile?.id || 'guest'} userProfile={userProfile} onNavigate={handleNavChange}/>;
       case 'mini-games':
         return <MiniGameChallengeSystem userProfile={userProfile} onClose={() => setCurrentScreen('home')} />;
       case 'sleep':
-        return <SleepHealthIntegration key={userProfile?.email || userProfile?.id || 'guest'} userProfile={userProfile} />;
+        return <SleepHealthIntegration key={userProfile?.email || userProfile?.id || 'guest'} userProfile={userProfile} onNavigate={setCurrentScreen} onUpdateProfile={async(next)=>{const saved=await UserProfileService.updateProfile(next);if(!saved)throw new Error('Sign in again to save your sleep settings.');setUserProfile(saved);}} />;
       case 'location':
         return (
           <LocationSmartFeatures
@@ -2683,18 +2876,23 @@ export default function App() {
   };
 
   // Don't show header and navigation for special screens
-  const shouldShowChrome = !['loading', 'start', 'auth', 'onboarding'].includes(currentScreen);
+  const shouldShowChrome = (isAuthenticated || isGuest) && !['loading', 'start', 'auth', 'onboarding'].includes(currentScreen);
 
   return (
     <SafeAreaProvider>
       <StripeProvider publishableKey={stripePublishableKey || ''}>
         <SafeAreaView style={styles.container}>
+          <ThemeBackdrop />
           {shouldShowChrome && Header()}
-          {renderScreen()}
+          <MotionScreen screenKey={currentScreen}>{renderScreen()}</MotionScreen>
           {shouldShowChrome && Navigation()}
+          {shouldShowChrome && <Celebration />}
+
+          {shouldShowChrome && currentScreen !== 'companion' && !showEnhancedAlarm && !showMiniGame && !showCreateAlarm && <FloatingCompanion navigationHeight={navigationHeight} character={companionCharacter} reducedMotion={userProfile?.preferences?.reducedSensory} onPress={() => setCurrentScreen('companion')}/>}
+
 
         {/* Mandatory Password Setup for Google accounts */}
-        <Modal visible={mustSetPassword} animationType="slide" presentationStyle="fullScreen">
+        <Modal visible={mustSetPassword} animationType={modalTransition} presentationStyle="fullScreen">
           <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
             <View style={{ padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ fontSize: 18, fontWeight: '900', color: '#111827' }}>Set a password</Text>
@@ -2731,8 +2929,10 @@ export default function App() {
           </SafeAreaView>
         </Modal>
 
+        {welcome&&<WelcomePanel key={welcome.account} visible={currentScreen==='home'&&!needsOnboarding&&!mustSetPassword&&!currentActiveAlarm&&!challengeLockActive&&!showCreateAlarm&&!showMiniGame&&!showEnhancedAlarm&&!showPremiumModal&&!showRisePoints&&!showCosmeticStore&&!showPaymentTest&&!showAdminPanel&&!showTermsAndConditions&&!showSupportCenter&&!showProfileModal}
+          bonus={welcome.bonus} canStartTrial={welcome.canStartTrial} onComplete={finishWelcome} onSkip={skipWelcome}/>}
         {/* Profile Modal */}
-        <Modal visible={showProfileModal} animationType="slide" presentationStyle="pageSheet">
+        <Modal visible={showProfileModal} animationType={modalTransition} presentationStyle="pageSheet" onRequestClose={() => setShowProfileModal(false)}>
           <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
             <View style={{ padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ fontSize: 18, fontWeight: '800', color: '#111827' }}>Profile</Text>
@@ -2740,70 +2940,18 @@ export default function App() {
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#667eea' }}>Done</Text>
               </TouchableOpacity>
             </View>
-            <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={[styles.profileAvatar, { marginRight: 12, width: 56, height: 56, borderRadius: 28 }]}>
-                  {userProfile?.photoUrl ? (
-                    <Image source={{ uri: userProfile.photoUrl }} style={[styles.profileAvatarImage, { width: 56, height: 56, borderRadius: 28 }]} />
-                  ) : (
-                    <Text style={styles.profileAvatarFallback}>👤</Text>
-                  )}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 18, fontWeight: '800', color: '#111827' }} numberOfLines={1}>
-                    {userProfile?.displayName || 'RiseQuest User'}
-                  </Text>
-                  <Text style={{ fontSize: 13, color: '#475569' }} numberOfLines={1}>
-                    {userProfile?.email || ''}
-                  </Text>
-                </View>
-              </View>
-              {!!userProfile?.phoneNumber && (
-                <Text style={{ marginTop: 10, fontSize: 13, color: '#475569' }}>Phone: {userProfile.phoneNumber}</Text>
-              )}
-              {!!userProfile?.authProvider && (
-                <Text style={{ marginTop: 6, fontSize: 13, color: '#475569' }}>Provider: {userProfile.authProvider}</Text>
-              )}
-              {!!userProfile?.ageGroup && (
-                <Text style={{ marginTop: 6, fontSize: 13, color: '#475569' }}>Age group: {userProfile.ageGroup}</Text>
-              )}
-
-              <Text style={{ marginTop: 14, fontSize: 14, fontWeight: '800', color: '#111827' }}>Onboarding</Text>
-              <Text style={{ marginTop: 6, fontSize: 13, color: '#475569' }}>
-                Support mode: {userProfile?.supportEnabled ? 'Enabled' : 'Off'}
-              </Text>
-              {!!userProfile?.supportConditions?.length && (
-                <Text style={{ marginTop: 6, fontSize: 13, color: '#475569' }}>
-                  Support areas: {userProfile.supportConditions.join(', ')}
-                </Text>
-              )}
-              {!!userProfile?.preferences?.goals?.length && (
-                <Text style={{ marginTop: 6, fontSize: 13, color: '#475569' }}>
-                  Goals: {userProfile.preferences.goals.join(', ')}
-                </Text>
-              )}
-
-              <Text style={{ marginTop: 14, fontSize: 14, fontWeight: '800', color: '#111827' }}>Accessibility</Text>
-              <Text style={{ marginTop: 6, fontSize: 13, color: '#475569' }}>
-                UI density: {userProfile?.preferences?.uiDensity || 'standard'}
-              </Text>
-              <Text style={{ marginTop: 6, fontSize: 13, color: '#475569' }}>
-                Reduced sensory: {userProfile?.preferences?.reducedSensory ? 'On' : 'Off'}
-              </Text>
-              <Text style={{ marginTop: 6, fontSize: 13, color: '#475569' }}>
-                Dyslexia-friendly: {userProfile?.preferences?.dyslexiaFriendly ? 'On' : 'Off'}
-              </Text>
-              <Text style={{ marginTop: 6, fontSize: 13, color: '#475569' }}>
-                Captions: {userProfile?.preferences?.captionsEnabled ? 'On' : 'Off'}
-              </Text>
-            </View>
+            <ProfileScreen key={userProfile?.id || userProfile?.email || 'guest'} userProfile={userProfile}
+              onCollection={() => {setShowProfileModal(false);setShowCosmeticStore(true);}}
+              onNotes={() => {setShowProfileModal(false);handleNavChange('notes');}}
+              onMessages={() => {setShowProfileModal(false);setCommunityEntry(value=>({tab:'messages',request:value.request+1}));handleNavChange('community');}}
+              onSettings={() => {setShowProfileModal(false);handleNavChange('settings');}} />
           </SafeAreaView>
         </Modal>
       
         {/* Create Alarm Modal */}
         <Modal
           visible={showCreateAlarm}
-          animationType="slide"
+          animationType={modalTransition}
           presentationStyle="fullScreen"
           onRequestClose={() => {
             if (Keyboard.isVisible()) Keyboard.dismiss();
@@ -2812,6 +2960,7 @@ export default function App() {
         >
           {showCreateAlarm && <SafeAreaProvider><CreateAlarmScreen
             initialAlarm={editingAlarm}
+            initialDraft={alarmDraft}
             onRefreshBalances={refreshRisePointsBalance}
             onSave={saveAlarm}
             onCancel={() => setShowCreateAlarm(false)}
@@ -2821,7 +2970,7 @@ export default function App() {
       {/* Enhanced Alarm Modal */}
       <Modal
         visible={showEnhancedAlarm}
-        animationType="slide"
+        animationType={modalTransition}
         presentationStyle="fullScreen"
         onRequestClose={() => {
           if (challengeLockActive && currentActiveAlarm?.challengeMode) return;
@@ -2843,7 +2992,7 @@ export default function App() {
       {/* Mini Game Modal (rendered after alarm so it overlays) */}
       <Modal
         visible={showMiniGame}
-        animationType="slide"
+        animationType={modalTransition}
         presentationStyle="fullScreen"
         onRequestClose={() => {
           if (challengeLockActive && currentActiveAlarm?.challengeMode) return;
@@ -2909,7 +3058,7 @@ export default function App() {
       {/* Payment Flow Test Modal */}
       <Modal
         visible={showPaymentTest}
-        animationType="slide"
+        animationType={modalTransition}
         presentationStyle="fullScreen"
         onRequestClose={() => setShowPaymentTest(false)}
       >
@@ -2927,7 +3076,7 @@ export default function App() {
       {/* Cosmetic Store Modal */}
       <Modal
         visible={showCosmeticStore}
-        animationType="slide"
+        animationType={modalTransition}
         presentationStyle="fullScreen"
         onRequestClose={finishCosmeticBrowsing}
       >
@@ -2939,7 +3088,7 @@ export default function App() {
               <Text style={{ fontSize: 14, fontWeight: '700', color: '#667eea' }}>Done</Text>
             </TouchableOpacity>
           </View>
-          <CosmeticStore userProfile={userProfile} onPurchaseStarted={() => { cosmeticCheckoutRef.current = true; transitionAds.cancel(); }} onPurchaseComplete={() => {}} />
+          {showCosmeticStore && <CosmeticStore key={userProfile?.email || 'guest'} onOpenCompanions={() => {setShowCosmeticStore(false);setCurrentScreen('companion');}} userProfile={userProfile} onPurchaseStarted={() => { cosmeticCheckoutRef.current = true; transitionAds.cancel(); }} onPurchaseComplete={() => {}} />}
         </SafeAreaView>
         </SafeAreaProvider>
       </Modal>

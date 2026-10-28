@@ -1,3 +1,5 @@
+import { refreshCollection } from './cosmeticCollection';
+import { celebrate } from '../features/customization/ThemeMotion';
 import { getAuthToken, setAuthToken } from './AuthTokenStorage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getBackendBaseUrl } from '../config/backendConfig';
@@ -149,6 +151,8 @@ class RiseQuestWalletService {
       });
 
       this.walletCache = null;
+      if (result.awarded > 0) celebrate('progress');
+      refreshCollection().catch(() => {});
       return result;
     } catch (error) {
       console.error('Error awarding Rise Points:', error);
@@ -183,7 +187,7 @@ class RiseQuestWalletService {
   // === GAMIFICATION FEATURES ===
 
   async awardDailyLoginBonus(userId) {
-    return this.awardRisePoints(userId, 10, 'Daily login bonus', {
+    return this.awardRisePoints(userId, 2, 'Daily login bonus', {
       type: 'daily_login',
       timestamp: new Date().toISOString()
     });
@@ -197,7 +201,7 @@ class RiseQuestWalletService {
       extreme: 25
     };
     
-    return this.awardRisePoints(userId, points[difficulty] || 10, `Alarm completed (${difficulty})`, {
+    return this.awardRisePoints(userId, 3, `Alarm completed (${difficulty})`, {
       type: 'alarm_completion',
       difficulty,
       timestamp: new Date().toISOString()
@@ -214,7 +218,7 @@ class RiseQuestWalletService {
       physical: 25
     };
     
-    return this.awardRisePoints(userId, points[challengeType] || 15, `Snooze challenge completed (${challengeType})`, {
+    return this.awardRisePoints(userId, 2, `Snooze challenge completed (${challengeType})`, {
       type: 'snooze_challenge',
       challengeType,
       success,

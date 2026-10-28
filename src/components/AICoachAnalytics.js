@@ -1,20 +1,8 @@
+import ModalHeading from './ModalHeading';
+import Modal, { AppAlert as Alert } from './AppModal';
 import { getAuthToken } from '../services/AuthTokenStorage';
 import React, { useEffect, useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  FlatList,
-  Modal,
-  Dimensions,
-  Alert,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  SafeAreaView,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, FlatList, Dimensions, TextInput, KeyboardAvoidingView, Platform, SafeAreaView } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { LineChart, BarChart, PieChart } from 'react-native-chart-kit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -732,10 +720,10 @@ export const AICoachAnalytics = ({ userProfile, alarmData, sleepData, onNavigate
         });
       }}
     >
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.chatContainer}>
+      <LinearGradient colors={['#FFF9F2', '#FFF0DB']} style={styles.chatContainer}>
         <SafeAreaView style={{ flex: 1 }}>
           <View style={styles.chatHeader}>
-            <Text style={styles.chatTitle}>💬 AI Coach Chat</Text>
+            <ModalHeading compact title="AI Coach Chat" icon="community"/>
             <TouchableOpacity
               onPress={() => {
                 suppressAutoRefocusRef.current = true;
@@ -1057,7 +1045,7 @@ export const AICoachAnalytics = ({ userProfile, alarmData, sleepData, onNavigate
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={['#FF7A00', '#7C5CFC']} style={styles.header}>
+      <LinearGradient colors={['#FFF0DB', '#E7F8F4']} style={styles.header}>
         <Text style={styles.headerTitle}>🤖 AI Coach & Analytics</Text>
         <Text style={styles.headerSubtitle}>Personalized insights and intelligent coaching</Text>
       </LinearGradient>
@@ -1112,11 +1100,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: 'white',
+    color: '#252438',
   },
   headerSubtitle: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.8)',
+    color: '#252438',
     marginTop: 4,
   },
   tabSelector: {
@@ -1132,14 +1120,14 @@ const styles = StyleSheet.create({
   },
   activeTab: {
     borderBottomWidth: 2,
-    borderBottomColor: '#667eea',
+    borderBottomColor: '#A65000',
   },
   tabText: {
     fontSize: 16,
     color: '#666',
   },
   activeTabText: {
-    color: '#667eea',
+    color: '#A65000',
     fontWeight: '600',
   },
   tabContent: {
@@ -1167,7 +1155,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   chatButton: {
-    backgroundColor: '#667eea',
+    backgroundColor: '#A65000',
     padding: 15,
     borderRadius: 10,
     alignItems: 'center',
@@ -1179,7 +1167,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   chatButtonText: {
-    color: 'white',
+    color: '#252438',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -1203,7 +1191,7 @@ const styles = StyleSheet.create({
     minWidth: 80,
   },
   personalitySelected: {
-    backgroundColor: '#667eea',
+    backgroundColor: '#A65000',
   },
   personalityIcon: {
     fontSize: 24,
@@ -1282,7 +1270,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#4CAF50',
   },
   priorityText: {
-    color: 'white',
+    color: '#252438',
     fontSize: 10,
     fontWeight: 'bold',
   },
@@ -1311,7 +1299,7 @@ const styles = StyleSheet.create({
     marginLeft: 5,
   },
   timeButtonActive: {
-    backgroundColor: '#667eea',
+    backgroundColor: '#A65000',
   },
   timeButtonText: {
     color: '#666',
@@ -1319,7 +1307,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   timeButtonActiveText: {
-    color: 'white',
+    color: '#252438',
   },
 
   // Metrics Grid
@@ -1344,7 +1332,7 @@ const styles = StyleSheet.create({
   metricValue: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#667eea',
+    color: '#A65000',
   },
   metricLabel: {
     fontSize: 14,
@@ -1477,22 +1465,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   chatHeader: {
+    backgroundColor:'#FFF0DB',borderBottomLeftRadius:26,borderBottomRightRadius:26,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 18,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.2)',
+    borderBottomColor: '#F3E3CF',
   },
   chatTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: 'white',
+    color: '#252438',
   },
   closeButton: {
     fontSize: 24,
-    color: 'white',
+    color: '#252438',
     padding: 5,
   },
   chatMessages: {
@@ -1507,7 +1496,7 @@ const styles = StyleSheet.create({
   },
   userMessage: {
     alignSelf: 'flex-end',
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#F3E3CF',
   },
   aiMessage: {
     alignSelf: 'flex-start',
@@ -1528,14 +1517,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.2)',
+    borderTopColor: '#F3E3CF',
   },
   messageInput: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#F3E3CF',
     padding: 12,
     borderRadius: 10,
-    color: 'white',
+    color: '#252438',
     fontSize: 16,
     marginRight: 10,
     maxHeight: 100,
@@ -1547,7 +1536,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sendButtonText: {
-    color: 'white',
+    color: '#252438',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -1579,3 +1568,4 @@ const styles = StyleSheet.create({
 });
 
 export default AICoachAnalytics;
+

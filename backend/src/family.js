@@ -8,7 +8,7 @@ const { getTransporter, getSmtpConfigFromEnv } = require('./services/email');
 
 const NOTICE_VERSION = '2026-09-25-v1';
 const FAMILY_NOTICE = `RiseQuest parent notice (${NOTICE_VERSION})\n\n` +
-  'Operator: GoldenEpic Solutions Inc. Contact: admin@goldenepics.com.\n' +
+  'Operator: GoldenEpic Solutions Inc. Contact: owner@example.invalid.\n' +
   'A child profile stores a nickname, age band, routines, quests, alarm activity and optional accessibility preferences on our privately operated backend. Do not provide a legal child name, address, school, medical diagnosis, or private contact details.\n' +
   'Parents can review, edit and delete these records in Family profiles. Withdrawing consent removes the child account and stops online access. Restricted-access recovery backups may temporarily retain deleted records under our published retention policy.\n' +
   'Children receive curated wellbeing suggestions, not external generative AI. Their profiles and community are private. No child conversations, conditions, sleep or mood information is used for advertising.\n' +

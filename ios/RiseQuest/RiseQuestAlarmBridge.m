@@ -10,4 +10,6 @@ RCT_EXTERN_METHOD(cacheSpeech:(NSString *)fingerprint encoded:(NSString *)encode
 RCT_EXTERN_METHOD(hasSpeech:(NSString *)fingerprint resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(stop:(NSString *)alarmId)
 RCT_EXTERN_METHOD(active:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(listenOnce:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(cancelListening)
 @end

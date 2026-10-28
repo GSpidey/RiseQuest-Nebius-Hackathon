@@ -1,17 +1,9 @@
+import Modal, { AppAlert as Alert } from './components/AppModal';
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Modal,
-  TextInput,
-  Alert,
-  Linking,
-  Switch,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Linking, Switch, Platform } from 'react-native';
+import KeyboardSurface from './components/KeyboardSurface';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { sunrise } from './components/SunriseUI';
 import LinearGradient from 'react-native-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserProfileService } from './models/RiseQuestModels';
@@ -47,7 +39,7 @@ const SupportCenter = ({ visible, onClose, userProfile, onUpdateProfile }) => {
     });
   }, [visible, userProfile]);
 
-  const supportEmail = 'Risequestsupport@goldenepics.com';
+  const supportEmail = 'support@example.invalid';
 
   const toggleArrayValue = (arr, value) => {
     const list = Array.isArray(arr) ? arr : [];
@@ -106,7 +98,7 @@ const SupportCenter = ({ visible, onClose, userProfile, onUpdateProfile }) => {
         },
         {
           q: 'Can I get a refund?',
-          a: 'Refund policies depend on your platform:\n• iOS: Apple handles refunds through their standard policy\n• Android: Google Play refund policy applies\n\nContact us at Risequestsupport@goldenepics.com for assistance with refund requests.'
+          a: 'Refund policies depend on your platform:\n• iOS: Apple handles refunds through their standard policy\n• Android: Google Play refund policy applies\n\nContact us at support@example.invalid for assistance with refund requests.'
         },
         {
           q: 'What happens after my free trial?',
@@ -253,7 +245,7 @@ Thank you!
   );
 
   const FAQTab = () => (
-    <ScrollView style={styles.tabContent}>
+    <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabBody} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
       <QuickActions />
       
       {faqData.map((category, categoryIndex) => (
@@ -272,7 +264,7 @@ Thank you!
   );
 
   const ContactTab = () => (
-    <ScrollView style={styles.tabContent}>
+    <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabBody} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
       <Text style={styles.sectionTitle}>📞 Contact Support</Text>
       <Text style={styles.supportInfo}>
         We're here to help! Choose your issue type below or send us a detailed message.
@@ -364,7 +356,7 @@ Thank you!
   );
 
   const SupportSettingsTab = () => (
-    <ScrollView style={styles.tabContent} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabBody} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
       <Text style={styles.sectionTitle}>🧠 Support Settings</Text>
       <Text style={styles.supportInfo}>
         Adjust neurodivergent support and accessibility preferences. These settings are optional and can be changed anytime.
@@ -474,16 +466,17 @@ Thank you!
 
   const renderTabContent = () => {
     switch (activeTab) {
-      case 'settings': return <SupportSettingsTab />;
-      case 'faq': return <FAQTab />;
-      case 'contact': return <ContactTab />;
-      default: return <FAQTab />;
+      case 'settings': return SupportSettingsTab();
+      case 'faq': return FAQTab();
+      case 'contact': return ContactTab();
+      default: return FAQTab();
     }
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.container}>
+    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
+      <SafeAreaProvider><SafeAreaView style={styles.container}>
+      <LinearGradient colors={[sunrise.background, sunrise.orangeTint]} style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Support</Text>
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
@@ -520,10 +513,11 @@ Thank you!
           </TouchableOpacity>
         </View>
 
-        <View style={styles.content}>
+        <KeyboardSurface style={styles.content}>
           {renderTabContent()}
-        </View>
+        </KeyboardSurface>
       </LinearGradient>
+      </SafeAreaView></SafeAreaProvider>
     </Modal>
   );
 };
@@ -531,21 +525,22 @@ Thank you!
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: sunrise.background,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
-    paddingTop: 50,
+    paddingTop: 16,
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: 'white',
+    color: sunrise.ink,
   },
   closeButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: sunrise.orangeTint,
     borderRadius: 20,
     width: 40,
     height: 40,
@@ -553,13 +548,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   closeButtonText: {
-    color: 'white',
+    color: sunrise.ink,
     fontSize: 18,
     fontWeight: 'bold',
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: sunrise.background,
     margin: 20,
     borderRadius: 15,
     padding: 5,
@@ -574,12 +569,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
   },
   tabText: {
-    color: 'white',
+    color: sunrise.ink,
     fontSize: 14,
     fontWeight: '600',
   },
   activeTabText: {
-    color: '#667eea',
+    color: '#9B4B00',
   },
   content: {
     flex: 1,
@@ -587,28 +582,26 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
   },
-  tabContent: {
-    flex: 1,
-    padding: 20,
-  },
+  tabContent: { flex: 1 },
+  tabBody: { padding: 20, paddingBottom: 48 },
   quickActions: {
     marginBottom: 30,
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#4a5568',
+    color: sunrise.ink,
     marginBottom: 15,
   },
   quickActionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f7fafc',
+    backgroundColor: sunrise.background,
     borderRadius: 12,
     padding: 15,
     marginBottom: 10,
     borderLeftWidth: 4,
-    borderLeftColor: '#667eea',
+    borderLeftColor: sunrise.orange,
   },
   quickActionIcon: {
     fontSize: 20,
@@ -617,7 +610,7 @@ const styles = StyleSheet.create({
   quickActionText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#4a5568',
+    color: sunrise.ink,
   },
   faqCategory: {
     marginBottom: 25,
@@ -625,10 +618,10 @@ const styles = StyleSheet.create({
   categoryTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#667eea',
+    color: '#9B4B00',
     marginBottom: 15,
     borderBottomWidth: 2,
-    borderBottomColor: '#e2e8f0',
+    borderBottomColor: sunrise.border,
     paddingBottom: 5,
   },
   faqItem: {
@@ -637,22 +630,22 @@ const styles = StyleSheet.create({
     padding: 15,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: sunrise.border,
   },
   faqQuestion: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#4a5568',
+    color: sunrise.ink,
     marginBottom: 8,
   },
   faqAnswer: {
     fontSize: 14,
-    color: '#718096',
+    color: sunrise.muted,
     lineHeight: 20,
   },
   supportInfo: {
     fontSize: 16,
-    color: '#718096',
+    color: sunrise.muted,
     lineHeight: 24,
     marginBottom: 20,
     textAlign: 'center',
@@ -662,7 +655,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: sunrise.border,
     marginBottom: 12,
   },
   settingRow: {
@@ -673,12 +666,12 @@ const styles = StyleSheet.create({
   settingTitle: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#111827',
+    color: sunrise.ink,
     marginBottom: 2,
   },
   settingDesc: {
     fontSize: 13,
-    color: '#64748b',
+    color: sunrise.muted,
     lineHeight: 18,
   },
   divider: {
@@ -696,24 +689,24 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 999,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: sunrise.background,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: sunrise.border,
   },
   pillActive: {
-    backgroundColor: '#e0e7ff',
-    borderColor: '#667eea',
+    backgroundColor: sunrise.orangeTint,
+    borderColor: sunrise.orange,
   },
   pillText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#334155',
+    color: sunrise.ink,
   },
   pillTextActive: {
-    color: '#4338ca',
+    color: '#9B4B00',
   },
   primarySaveButton: {
-    backgroundColor: '#111827',
+    backgroundColor: sunrise.orangeTint,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -721,7 +714,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   primarySaveButtonText: {
-    color: '#ffffff',
+    color: sunrise.ink,
     fontWeight: '900',
   },
   contactReasons: {
@@ -730,28 +723,28 @@ const styles = StyleSheet.create({
   reasonsTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#4a5568',
+    color: sunrise.ink,
     marginBottom: 10,
   },
   reasonButton: {
-    backgroundColor: '#f7fafc',
+    backgroundColor: sunrise.background,
     borderRadius: 10,
     padding: 15,
     marginBottom: 8,
     borderWidth: 2,
-    borderColor: '#e2e8f0',
+    borderColor: sunrise.border,
   },
   reasonButtonSelected: {
-    backgroundColor: '#ebf4ff',
-    borderColor: '#667eea',
+    backgroundColor: sunrise.orangeTint,
+    borderColor: sunrise.orange,
   },
   reasonText: {
     fontSize: 14,
-    color: '#718096',
+    color: sunrise.muted,
     fontWeight: '500',
   },
   reasonTextSelected: {
-    color: '#667eea',
+    color: '#9B4B00',
     fontWeight: 'bold',
   },
   formContainer: {
@@ -760,7 +753,7 @@ const styles = StyleSheet.create({
   formLabel: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#4a5568',
+    color: sunrise.ink,
     marginBottom: 8,
     marginTop: 15,
   },
@@ -769,9 +762,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 15,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: sunrise.border,
     fontSize: 14,
-    color: '#4a5568',
+    color: sunrise.ink,
   },
   messageInput: {
     height: 120,
@@ -786,13 +779,13 @@ const styles = StyleSheet.create({
   },
   priorityButton: {
     flex: 1,
-    backgroundColor: '#f7fafc',
+    backgroundColor: sunrise.background,
     borderRadius: 8,
     padding: 12,
     marginHorizontal: 2,
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#e2e8f0',
+    borderColor: sunrise.border,
   },
   priorityButtonSelected: {
     backgroundColor: '#fed7d7',
@@ -801,13 +794,13 @@ const styles = StyleSheet.create({
   priorityText: {
     fontSize: 12,
     fontWeight: 'bold',
-    color: '#718096',
+    color: sunrise.muted,
   },
   priorityTextSelected: {
     color: '#e53e3e',
   },
   sendButton: {
-    backgroundColor: '#667eea',
+    backgroundColor: sunrise.orangeTint,
     borderRadius: 12,
     padding: 18,
     alignItems: 'center',
@@ -815,7 +808,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   sendButtonText: {
-    color: 'white',
+    color: sunrise.ink,
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -829,3 +822,4 @@ const styles = StyleSheet.create({
 });
 
 export default SupportCenter;
+

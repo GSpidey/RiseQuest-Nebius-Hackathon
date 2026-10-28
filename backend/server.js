@@ -33,9 +33,9 @@ if (!stripeSecretKey) {
 }
 const stripe = require('stripe')(stripeSecretKey || '');
 
-const jwtSecret = process.env.AUTH_JWT_SECRET || process.env.JWT_SECRET || 'risequest-dev-secret';
-if (process.env.NODE_ENV === 'production' && jwtSecret === 'risequest-dev-secret') {
-  throw new Error('AUTH_JWT_SECRET must be configured in production');
+const jwtSecret = process.env.AUTH_JWT_SECRET || process.env.JWT_SECRET;
+if (!jwtSecret || jwtSecret.length < 32) {
+  throw new Error('Set AUTH_JWT_SECRET to your own random secret of at least 32 characters');
 }
 
 const app = express();
@@ -75,15 +75,13 @@ app.use(cors({
 }));
 
 // Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
-});
+const { apiRateOptions, rateMessage } = require('./src/ratePolicy');
+const limiter = rateLimit(apiRateOptions(jwtSecret));
 app.use('/api/', limiter);
 const privateRateKey = req => crypto.createHmac('sha256', jwtSecret).update(String(req.ip || 'unknown')).digest('hex');
-const sensitiveLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 15, keyGenerator: privateRateKey, standardHeaders: true, legacyHeaders: false });
+const sensitiveLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 15, keyGenerator: privateRateKey, standardHeaders: true, legacyHeaders: false, message: rateMessage });
 app.use('/api/auth', sensitiveLimit);
-const providerLimit = rateLimit({ windowMs: 60 * 1000, max: 20, keyGenerator: req => req.auth?.userId || privateRateKey(req), standardHeaders: true, legacyHeaders: false });
+const providerLimit = rateLimit({ windowMs: 60 * 1000, max: 20, keyGenerator: req => req.auth?.userId || privateRateKey(req), standardHeaders: true, legacyHeaders: false, message: rateMessage });
 
 // Webhook endpoint (raw body needed for signature verification)
 app.use('/webhook', express.raw({ type: 'application/json' }));
@@ -279,6 +277,7 @@ function getBearerToken(req) {
 const requireAuth = authentication(prisma, jwtSecret);
 registerProfileRoutes(app, { prisma, requireAuth });
 require('./src/appleAuth').registerAppleAuth(app, { prisma, requireAuth, issueAuthToken, secret: jwtSecret });
+require('./src/goldenAuth').registerGoldenAuth(app, { prisma, requireAuth, issueAuthToken, secret: jwtSecret });
 require('./src/storeBilling').registerStoreBilling(app, { prisma, requireAuth, secret: jwtSecret });
 require('./src/accountDeletion').registerAccountDeletion(app, { prisma, requireAuth, stripe, secret: jwtSecret, uploadsDir });
 require('./src/retention').startRetention(prisma, uploadsDir);
@@ -293,27 +292,13 @@ function checkoutKey(req, res, next) {
 
 app.use(['/api/ai', '/api/tts', '/api/coach/chat', '/api/support', '/api/me/avatar', '/api/me/banner', '/api/stripe', '/api/create-payment-intent', '/api/create-subscription'], requireAuth, providerLimit);
 
-async function requireAdmin(req, res, next) {
-  try {
-    const token = getBearerToken(req);
-    if (!token) return res.status(401).json({ error: 'Missing auth token' });
-    const decoded = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] });
-    const userId = decoded.sub;
-    if (!userId) return res.status(401).json({ error: 'Invalid auth token' });
-
-    const user = await prisma.user.findUnique({ where: { id: String(userId).toLowerCase() } });
-    if (!user) return res.status(403).json({ error: 'Forbidden' });
-    if (user.disabledAt) return res.status(403).json({ error: 'Account disabled' });
-    const role = String(user.role || 'USER').toUpperCase();
-    if (!['STAFF', 'ADMIN', 'SUPERADMIN'].includes(role)) {
+function requireAdmin(req, res, next) {
+  return requireAuth(req, res, () => {
+    if (!['STAFF', 'ADMIN', 'SUPERADMIN'].includes(String(req.auth.role || '').toUpperCase())) {
       return res.status(403).json({ error: 'Admin access required' });
     }
-
-    req.auth = { userId: user.id, provider: decoded.provider || null, role };
-    return next();
-  } catch (error) {
-    return res.status(401).json({ error: 'Invalid auth token' });
-  }
+    next();
+  });
 }
 
 const ROLE_RANK = {
@@ -340,6 +325,13 @@ function requireRole(minRole) {
 }
 
 require('./src/family').registerFamilyRoutes(app, { prisma, requireAuth, requireAdmin, requireRole, secret: jwtSecret });
+require('./src/cosmetics').registerCosmetics(app, { prisma, requireAuth, requireAdmin, requireRole });
+require('./src/cosmeticSounds').registerCosmeticSounds(app, requireAuth);
+require('./src/themeStudio').registerThemeStudio(app, { prisma, requireAdmin, requireRole, uploadsDir });
+require('./src/adminConsole').registerAdminConsole(app, { prisma, requireAdmin, requireRole, sendPasswordResetEmail });
+require('./src/profileCards').registerProfileCards(app, { prisma, requireAuth });
+require('./src/welcome').registerWelcome(app, { prisma, requireAuth, entitlements: require('./src/storeBilling').entitlements });
+require('./src/progression').registerProgression(app, {prisma,requireAuth});
 
 async function writeAdminAudit({ actorId, action, targetUserId = null, metadata = {} }) {
   try {
@@ -383,7 +375,7 @@ function httpsGetJson(url) {
 function allowedGoogleAudiences() {
   const hardcoded = [
     // Web client id in android/app/google-services.json (client_type 3)
-    '628709146989-df1prq7ube4v3383tg8gfe4ha3asrtb6.apps.googleusercontent.com',
+    'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
   ];
   const envIds = [process.env.GOOGLE_WEB_CLIENT_ID, process.env.GOOGLE_CLIENT_ID].filter(Boolean);
   return new Set([...hardcoded, ...envIds]);
@@ -600,124 +592,6 @@ app.get('/api/admin/users/:id', requireAdmin, requireRole('ADMIN'), async (req, 
   } catch (e) {
     console.error('Admin user detail error:', e);
     return res.status(500).json({ error: 'Failed to load user' });
-  }
-});
-
-app.patch('/api/admin/users/:id', requireAdmin, requireRole('ADMIN'), async (req, res) => {
-  try {
-    const actorId = String(req.auth?.userId || '').toLowerCase();
-    const id = String(req.params.id || '').trim().toLowerCase();
-    const body = req.body && typeof req.body === 'object' ? req.body : {};
-
-    const role = body.role != null ? String(body.role).trim().toUpperCase() : null;
-    const disabled = body.disabled != null ? Boolean(body.disabled) : null;
-
-    const data = {};
-    if (role) {
-      if (!['USER', 'STAFF', 'ADMIN', 'SUPERADMIN'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
-
-      // Only SUPERADMIN can grant ADMIN/SUPERADMIN.
-      const actorRole = String(req.auth?.role || 'USER').toUpperCase();
-      const isHigh = role === 'ADMIN' || role === 'SUPERADMIN';
-      if (isHigh && actorRole !== 'SUPERADMIN') {
-        return res.status(403).json({ error: 'Only SUPERADMIN can grant admin roles' });
-      }
-
-      // ADMIN can grant STAFF (limited admin).
-      data.role = role;
-    }
-    if (disabled != null) {
-      data.disabledAt = disabled ? new Date() : null;
-    }
-
-    if (!Object.keys(data).length) return res.status(400).json({ error: 'No changes provided' });
-
-    const updated = await prisma.user.update({
-      where: { id },
-      data,
-      select: {
-        id: true,
-        name: true,
-        phoneNumber: true,
-        authProvider: true,
-        role: true,
-        disabledAt: true,
-        updatedAt: true,
-      },
-    });
-
-    await writeAdminAudit({ actorId, action: 'USER_UPDATE', targetUserId: id, metadata: { changes: data } });
-    return res.json({ success: true, user: updated });
-  } catch (e) {
-    console.error('Admin user update error:', e);
-    return res.status(500).json({ error: 'Failed to update user' });
-  }
-});
-
-app.post('/api/admin/users/:id/set-password', requireAdmin, requireRole('ADMIN'), async (req, res) => {
-  try {
-    const actorId = String(req.auth?.userId || '').toLowerCase();
-    const id = String(req.params.id || '').trim().toLowerCase();
-    const password = String(req.body?.password || '');
-    if (!password || password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
-    }
-
-    const user = await prisma.user.findUnique({ where: { id } });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-
-    const passwordHash = await bcrypt.hash(password, 10);
-    const updated = await prisma.user.update({
-      where: { id },
-      data: {
-        passwordHash,
-        authProvider: 'password',
-      },
-      select: { id: true, role: true, disabledAt: true, updatedAt: true },
-    });
-
-    await writeAdminAudit({ actorId, action: 'USER_SET_PASSWORD', targetUserId: id, metadata: {} });
-    return res.json({ success: true, user: updated });
-  } catch (e) {
-    console.error('Admin set-password error:', e);
-    return res.status(500).json({ error: 'Failed to set password' });
-  }
-});
-
-app.post('/api/admin/users/:id/trigger-password-reset', requireAdmin, requireRole('ADMIN'), async (req, res) => {
-  try {
-    const actorId = String(req.auth?.userId || '').toLowerCase();
-    const id = String(req.params.id || '').trim().toLowerCase();
-
-    const user = await prisma.user.findUnique({ where: { id } });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    if (user.disabledAt) return res.status(400).json({ error: 'User is disabled' });
-
-    // Create one-time token (30 min)
-    const token = crypto.randomBytes(24).toString('hex');
-    const tokenHash = sha256Hex(token);
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
-
-    await prisma.passwordResetToken.create({
-      data: {
-        userId: id,
-        tokenHash,
-        expiresAt,
-      },
-    });
-
-    // Send via email (best-effort); do not reveal failure details.
-    try {
-      await sendPasswordResetEmail({ to: id, token, expiresAt });
-    } catch (e) {
-      console.warn('[AdminPasswordReset] Email send failed:', e?.message || e);
-    }
-
-    await writeAdminAudit({ actorId, action: 'USER_TRIGGER_PASSWORD_RESET', targetUserId: id, metadata: { expiresAt: expiresAt.toISOString() } });
-    return res.json({ success: true });
-  } catch (e) {
-    console.error('Admin trigger reset error:', e);
-    return res.status(500).json({ error: 'Failed to trigger reset' });
   }
 });
 
@@ -947,16 +821,9 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       });
     } catch (e) {
       // Never reveal whether an account exists; still return success.
-      console.warn('[PasswordReset] Email send failed:', e?.message || e);
-      if (!isProd) {
-        console.log(`[PasswordReset][DEV] email=${email} token=${token} expiresAt=${expiresAt.toISOString()}`);
-      }
+      console.warn('[PasswordReset] Email delivery failed.');
     }
 
-    if (!isProd) {
-      // Helpful for local/dev environments without SMTP.
-      return res.json({ success: true, devToken: token, expiresAt: expiresAt.toISOString() });
-    }
     return res.json({ success: true });
   } catch (error) {
     console.error('Forgot password error:', error);
@@ -967,44 +834,8 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 // Reset password using token
 app.post('/api/auth/reset-password', async (req, res) => {
   try {
-    const email = String(req.body.email || '').trim().toLowerCase();
-    const token = String(req.body.token || '').trim();
-    const password = String(req.body.password || '');
-
-    if (!email || !email.includes('@') || !token) {
-      return res.status(400).json({ error: 'Email and reset token are required' });
-    }
-    if (!password || password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
-    }
-
-    const user = await prisma.user.findUnique({ where: { id: email } });
-    if (!user) {
-      return res.status(400).json({ error: 'Invalid reset token' });
-    }
-
-    const tokenHash = sha256Hex(token);
-    const found = await prisma.passwordResetToken.findFirst({
-      where: {
-        userId: email,
-        tokenHash,
-        usedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    if (!found) {
-      return res.status(400).json({ error: 'Invalid or expired reset token' });
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    await prisma.$transaction(async (tx) => {
-      const consumed = await tx.passwordResetToken.updateMany({ where: { id: found.id, usedAt: null, expiresAt: { gt: new Date() } }, data: { usedAt: new Date() } });
-      if (consumed.count !== 1) throw new Error('Reset token has already been used');
-      await tx.user.update({ where: { id: email }, data: { passwordHash, authProvider: 'password' } });
-    });
+    const user = await require('./src/passwordRecovery').completePasswordReset(prisma, req.body);
+    const email = user.id;
 
     const tokenJwt = issueAuthToken(email, 'password');
     return res.json({
@@ -1018,7 +849,8 @@ app.post('/api/auth/reset-password', async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Reset password error:', error);
+    if (error.status === 400) return res.status(400).json({ error: error.message });
+    console.error('Reset password error:', error.code || error.name);
     return res.status(500).json({ error: 'Failed to reset password' });
   }
 });
@@ -2360,26 +2192,15 @@ app.get('/api/weather/current', async (req, res) => {
     const lat = Number(req.query.lat);
     const lon = Number(req.query.lon);
     const units = String(req.query.units || 'metric');
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    if (!Number.isFinite(lat) || Math.abs(lat)>90 || !Number.isFinite(lon) || Math.abs(lon)>180 || req.query.lat==null || req.query.lon==null) {
       return res.status(400).json({ error: 'Missing/invalid query params: lat, lon' });
     }
     const data = await getCurrentWeather({ lat, lon, units });
 
-    if (!data?.city) {
-      try {
-        const geo = await reverseGeocode({ lat, lon });
-        if (geo) {
-          data.city = geo.locality || geo.administrativeAreaLevel1 || geo.country || geo.formattedAddress || null;
-        }
-      } catch (_) {
-        // ignore: weather should still work without geocoding
-      }
-    }
-
     res.json(data);
   } catch (error) {
-    console.error('Weather error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('[Weather]', error.name);
+    res.status(503).json({ error: 'Weather could not refresh. Please try again shortly.' });
   }
 });
 
@@ -2615,11 +2436,12 @@ app.post('/api/sleep/entries', requireAuth, async (req, res) => {
 
     // Idempotency for non-manual sources (sync should overwrite the day's data instead of duplicating it).
     const dateKey = dateKeyUtc(wakeAt);
+    const created = await walletTransaction(prisma,userId,async tx=>{
     if (source !== 'manual') {
-      await prisma.sleepEntry.deleteMany({ where: { userId, dateKey, source } });
+      await tx.sleepEntry.deleteMany({ where: { userId, dateKey, source } });
     }
 
-    const created = await prisma.sleepEntry.create({
+    return tx.sleepEntry.create({
       data: {
         userId,
         dateKey,
@@ -2630,6 +2452,8 @@ app.post('/api/sleep/entries', requireAuth, async (req, res) => {
         notes,
         source,
       },
+    });
+
     });
 
     res.status(201).json({ success: true, entry: created });
@@ -2778,7 +2602,7 @@ app.post('/api/coach/chat', requireAuth, async (req, res) => {
     if (!coaching.externalAllowed) return res.json({ success: true, reply: curatedReply(message), provider: 'curated' });
     const inputSafety = await checkAiSafety(message, coaching);
     if (!inputSafety.allowed) return res.json({ success: true, reply: inputSafety.reply, provider: 'curated' });
-    if (!apiKey) return res.status(503).json({ error: 'Live coaching is temporarily unavailable' });
+
 
     const personality = String(req.body?.personality || 'motivational').trim().toLowerCase();
     const allowed = new Set(['motivational', 'gentle', 'scientific', 'friendly', 'professional', 'strict', 'rude', 'fun']);
@@ -2819,7 +2643,7 @@ app.get('/api/geo/reverse', async (req, res) => {
   try {
     const lat = Number(req.query.lat);
     const lon = Number(req.query.lon);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    if (!Number.isFinite(lat) || Math.abs(lat)>90 || !Number.isFinite(lon) || Math.abs(lon)>180 || req.query.lat==null || req.query.lon==null) {
       return res.status(400).json({ error: 'Missing/invalid query params: lat, lon' });
     }
     const data = await reverseGeocode({ lat, lon });
@@ -2888,7 +2712,7 @@ app.get('/api/geo/places/nearby', async (req, res) => {
   try {
     const lat = Number(req.query.lat);
     const lon = Number(req.query.lon);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    if (!Number.isFinite(lat) || Math.abs(lat)>90 || !Number.isFinite(lon) || Math.abs(lon)>180 || req.query.lat==null || req.query.lon==null) {
       return res.status(400).json({ error: 'Missing/invalid query params: lat, lon' });
     }
     const type = req.query.type != null ? String(req.query.type) : 'point_of_interest';
@@ -3058,37 +2882,10 @@ app.get('/api/users/:userId/quest-stats', requireAuth, ownRequest, async (req, r
 // PATCH /api/quests/:id/subtasks/:subtaskId - Toggle subtask completion
 app.patch('/api/quests/:id/subtasks/:subtaskId', requireAuth, ownQuest(prisma), async (req, res) => {
   try {
-    const questId = req.params.id;
-    const subtaskId = req.params.subtaskId;
-    const completed = Boolean(req.body.completed);
-
-    const subtask = await prisma.questSubtask.findUnique({ where: { id: subtaskId } });
-    if (!subtask || subtask.questId !== questId) {
-      return res.status(404).json({ error: 'Subtask not found' });
-    }
-
-    await prisma.questSubtask.update({
-      where: { id: subtaskId },
-      data: {
-        completed,
-        completedAt: completed ? new Date() : null,
-      },
-    });
-
-    const subtasks = await prisma.questSubtask.findMany({ where: { questId }, orderBy: { order: 'asc' } });
-    const completedCount = subtasks.filter(s => s.completed).length;
-    const progress = subtasks.length ? Math.round((completedCount / subtasks.length) * 100) : 0;
-
-    const updatedQuest = await prisma.quest.update({
-      where: { id: questId },
-      data: {
-        progress,
-        currentStep: completedCount,
-        status: progress === 100 ? 'completed' : 'active',
-        completedAt: progress === 100 ? new Date() : null,
-      },
-      include: { subtasks: { orderBy: { order: 'asc' } } },
-    });
+    const {lock,changeQuest}=require('./src/companionSupport');
+    const updatedQuest=await lock(prisma,req.auth.userId,tx=>changeQuest(tx,req.auth.userId,{
+      operation:'step_complete',id:req.params.id,stepId:req.params.subtaskId,completed:req.body.completed,
+    }));
 
     res.json({
       ...updatedQuest,
@@ -3112,7 +2909,8 @@ app.patch('/api/quests/:id/subtasks/:subtaskId', requireAuth, ownQuest(prisma), 
 // DELETE /api/quests/:id
 app.delete('/api/quests/:id', requireAuth, ownQuest(prisma), async (req, res) => {
   try {
-    await prisma.quest.delete({ where: { id: req.params.id } });
+    const {lock,changeQuest}=require('./src/companionSupport');
+    await lock(prisma,req.auth.userId,tx=>changeQuest(tx,req.auth.userId,{operation:'quest_delete',id:req.params.id}));
     res.json({ success: true });
   } catch (error) {
     console.error('Quest delete error:', error);
@@ -3529,20 +3327,23 @@ app.post('/api/wallet/claim-rise-points', requireAuth, ownRequest, async (req, r
   }
 });
 
+const rechargeService = require('./src/recharge');
+rechargeService.registerRecharge(app, { prisma, requireAuth, publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
+  stripe: new (require('stripe-recharge'))(stripeSecretKey || 'unconfigured', { apiVersion: '2026-08-26.dahlia', timeout: 10000, maxNetworkRetries: 0 }) });
+require('./src/services/assistant').registerAssistant(app, { prisma, requireAuth });
+require('./src/services/companionVoice').registerCompanionVoice(app, { prisma, requireAuth, uploadsDir });
+require('./src/companions').registerCompanions(app, { prisma, requireAuth });
+
+require('./src/services/readerVoice').registerReaderVoice(app, { prisma, requireAuth, uploadsDir });
+require('./src/companionSupport').registerSupport(app, { prisma, requireAuth });
+
 // Wallet: award/spend gamified RisePoints (server-side ledger)
 app.post('/api/wallet/award', requireAuth, ownRequest, async (req, res) => {
   const userId = req.auth.userId;
   try {
-    const reward = await rewardFor(prisma, userId, String(req.body.reason || ''), req.body.metadata);
-    const balance = await walletTransaction(prisma, userId, async tx => {
-      const previous = await tx.risePointsTransaction.findUnique({ where: { id: reward.id } });
-      if (!previous) {
-        await tx.risePointsTransaction.create({ data: { id: reward.id, userId, delta: reward.amount, reason: reward.reason } });
-        await tx.risePointsBalance.upsert({ where: { userId }, create: { userId, balance: reward.amount }, update: { balance: { increment: reward.amount } } });
-      }
-      return tx.risePointsBalance.findUnique({ where: { userId } });
-    });
-    res.json({ success: true, userId, balance: balance?.balance || 0 });
+    const result = await walletTransaction(prisma, userId, tx =>
+      require('./src/walletPolicy').awardReward(tx, userId, String(req.body.reason || ''), req.body.metadata));
+    res.json({ success: true, userId, ...result });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -3560,8 +3361,17 @@ app.post('/api/wallet/spend', requireAuth, ownRequest, async (req, res) => {
       if (previous && (previous.delta !== -amount || previous.reason !== reason)) throw new Error('Purchase key was already used for different items');
       const existing = await tx.risePointsBalance.findUnique({ where: { userId } });
       if (previous) return { ok: true, balance: existing?.balance || 0 };
+      const { recoverPurchases, ownedIds, grant } = require('./src/cosmetics');
+      const { byId, expand } = require('./src/cosmeticCatalog');
+      await recoverPurchases(tx, userId);
+      const owned = new Set(await ownedIds(tx, userId));
+      const itemIds = req.body.metadata.itemIds;
+      if (expand(itemIds).some(item => owned.has(item))) throw new Error('An item is already in your collection. Update the app to see adjusted bundle prices.');
+      const contents = itemIds.flatMap(item => byId[item]?.items || [item]);
+      if (new Set(contents).size !== contents.length) throw new Error('Your cart contains overlapping bundle items.');
       if (!existing || existing.balance < amount) return { ok: false, balance: existing?.balance || 0 };
-      await tx.risePointsTransaction.create({ data: { id, userId, delta: -amount, reason } });
+      await tx.risePointsTransaction.create({ data: { id, userId, delta: -amount, reason, metadata: { cosmeticsVersion: 2 } } });
+      await grant(tx, userId, expand(itemIds), 'purchase', id);
       const updated = await tx.risePointsBalance.update({ where: { userId }, data: { balance: { decrement: amount } } });
       return { ok: true, balance: updated.balance };
     });
@@ -3600,52 +3410,20 @@ app.get('/api/wallet/transactions', requireAuth, ownRequest, async (req, res) =>
 // Get pricing configuration
 app.get('/api/pricing-config', async (req, res) => {
   try {
-    const config = {
-      subscriptions: {
-        monthly: {
-          priceId: requireEnv('STRIPE_PRICE_PREMIUM_MONTHLY'),
-          amount: 5.99,
-          currency: 'usd',
-        },
-        yearly: {
-          priceId: requireEnv('STRIPE_PRICE_PREMIUM_YEARLY'),
-          amount: 49.99,
-          currency: 'usd',
-        },
-        family_monthly: {
-          priceId: requireEnv('STRIPE_PRICE_FAMILY_MONTHLY'),
-          amount: 8.99,
-          currency: 'usd',
-        },
-        family_yearly: {
-          priceId: requireEnv('STRIPE_PRICE_FAMILY_YEARLY'),
-          amount: 79.99,
-          currency: 'usd',
-        },
-      },
-      risepoints: {
-        small: { 
-          priceId: process.env.STRIPE_PRICE_RISEPOINTS_SMALL || null,
-          amount: 2.99,
-          points: 250,
-        },
-        medium: { 
-          priceId: process.env.STRIPE_PRICE_RISEPOINTS_MEDIUM || null,
-          amount: 4.99,
-          points: 550,
-        },
-        large: { 
-          priceId: process.env.STRIPE_PRICE_RISEPOINTS_LARGE || null,
-          amount: 9.99,
-          points: 1150,
-        },
-        mega: { 
-          priceId: process.env.STRIPE_PRICE_RISEPOINTS_MEGA || null,
-          amount: 19.99,
-          points: 3125,
-        },
-      },
-    };
+    const { PLANS, POINT_PACKS_V2, STRIPE_POINT_PRICES } = require('./src/economy');
+    const config = { economyVersion: 2, rewardDailyCap: 20, subscriptions: {}, risepoints: {} };
+    for (const [plan, reference] of Object.entries(PLANS)) {
+      const key = plan.startsWith('family') ? plan.toUpperCase() : `PREMIUM_${plan.toUpperCase()}`;
+      const priceId = process.env[`STRIPE_PRICE_${key}`];
+      if (!priceId) continue;
+      const price = await stripe.prices.retrieve(priceId);
+      if (!price.active || price.type !== 'recurring') continue;
+      config.subscriptions[plan] = { priceId, amount: price.unit_amount / 100, currency: price.currency,
+        allowance: reference.grant, referenceUsd: reference.cents / 100 };
+    }
+    for (const [pack, value] of Object.entries(POINT_PACKS_V2)) {
+      config.risepoints[pack] = { priceId: STRIPE_POINT_PRICES[pack], amount: value.cents / 100, points: value.points, name: value.name, currency: 'usd' };
+    }
 
     res.json(config);
   } catch (error) {
@@ -3717,16 +3495,56 @@ app.post('/webhook', async (req, res) => {
       await handleSubscriptionDeleted(event.data.object);
       break;
 
+    case 'invoice.payment_failed': {
+      const invoice = event.data.object;
+      if (invoice.subscription) await handleSubscriptionUpdated(await stripe.subscriptions.retrieve(invoice.subscription));
+      break;
+    }
+    case 'charge.refunded': {
+      const charge = event.data.object;
+      if (charge.metadata?.type === 'rp_recharge') await rechargeService.refund(prisma, charge);
+      if (charge.refunded && charge.invoice) {
+        const invoice = await stripe.invoices.retrieve(charge.invoice);
+        if (invoice.subscription) {
+          const subscription = await prisma.subscription.findUnique({where:{stripeSubscriptionId:invoice.subscription}});
+          if(subscription) await walletTransaction(prisma,subscription.userId,tx=>require('./src/economy').revokeSubscriptionGrant(tx,subscription.userId,'stripe',invoice.id));
+        }
+      }
+      break;
+    }
+    case 'invoice.paid': {
+      const invoice = event.data.object;
+      if (invoice.paid && invoice.amount_paid > 0 && invoice.subscription && !invoice.lines?.has_more) {
+        const sub = await stripe.subscriptions.retrieve(invoice.subscription);
+        await handleSubscriptionUpdated(sub);
+        const linked = await prisma.subscription.findUnique({where:{stripeSubscriptionId:sub.id}});
+        const userId = linked?.userId;
+        const prices = { monthly: 'STRIPE_PRICE_PREMIUM_MONTHLY', yearly: 'STRIPE_PRICE_PREMIUM_YEARLY',
+          family_monthly: 'STRIPE_PRICE_FAMILY_MONTHLY', family_yearly: 'STRIPE_PRICE_FAMILY_YEARLY' };
+        const line = invoice.lines?.data?.find(row => row.type === 'subscription' && !row.proration);
+        const plan = Object.entries(prices).find(([, key]) => process.env[key] && process.env[key] === line?.price?.id)?.[0];
+        if (userId && plan && await prisma.user.findUnique({ where: { id: userId } })) {
+          await walletTransaction(prisma, userId, tx => require('./src/economy').grantSubscription(tx, userId,
+            { store: 'stripe', period: invoice.id, plan, paid: true, purchasedAt: new Date(invoice.created * 1000) }));
+        }
+      }
+      break;
+    }
     case 'payment_intent.succeeded':
       console.log('Payment succeeded:', event.id);
       // Handle successful one-time payment
-      await handlePaymentSucceeded(event.data.object);
+      if (!await rechargeService.settle(prisma, event.data.object)) await handlePaymentSucceeded(event.data.object);
+      break;
+
+    case 'payment_intent.requires_action':
+    case 'payment_intent.canceled':
+      await rechargeService.settle(prisma, event.data.object);
       break;
 
     case 'payment_intent.payment_failed':
       console.log('Payment failed:', event.id);
       // Handle failed payment
-      await handlePaymentFailed(event.data.object);
+      if (!await rechargeService.settle(prisma, event.data.object)) await handlePaymentFailed(event.data.object);
       break;
 
     default:
@@ -3910,3 +3728,4 @@ if (require.main === module) {
 }
 
 module.exports = app;
+

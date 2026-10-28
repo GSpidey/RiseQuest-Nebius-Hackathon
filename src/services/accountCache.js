@@ -5,7 +5,8 @@ const keysForAccount = owner => {
   const encoded = encodeURIComponent(id);
   return [`risequest_profile:${encoded}`, `risequest_subscription:${encoded}`, `risequest_quests:${encoded}`,
     `risequest_chat:${encoded}`, `risequest_chat:${encoded}:personality`, `risequest_onboarded_email:${id}`,
-    `risequest_data:${encoded}:sleepData`];
+    `risequest_data:${encoded}:sleepData`, `cosmeticDefaultSound:${encoded}`,
+    ...['sound_birds','sound_rain','sound_motivational'].map(sound => `cosmeticSound:${encoded}:${sound}`)];
 };
 
 // Only explicitly identified account caches are removed. Alarms/settings and

@@ -1,3 +1,4 @@
+import { MotionIcon, MotionScreen } from '../features/customization/ThemeMotion';
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
@@ -10,6 +11,21 @@ export const sunrise = {
 };
 
 const paths = {
+  notes: 'M6 3h12v18H6ZM3 7h5M3 12h5M3 17h5M11 8h4M11 12h4M11 16h3',
+  messages: 'M3 3h14v11H8l-5 4V3ZM17 7h4v14l-5-4h-5v-3',
+  send: 'm3 3 19 9-19 9 4-9-4-9ZM7 12h15',
+  mic: 'M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0ZM5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8',
+  speaker: 'M3 9h4l5-4v14l-5-4H3ZM16 8a6 6 0 0 1 0 8M19 5a10 10 0 0 1 0 14',
+  stop: 'M6 6h12v12H6Z',
+  shop: 'M3 8h18l-2-5H5ZM4 8v13h16V8M9 21v-7h6v7',
+  close: 'm6 6 12 12M6 18 18 6',
+  check: 'm4 12 5 5L20 6',
+  leaf: 'M20 3C7 1 2 8 6 16s16 4 14-13ZM4 21 16 8',
+  sparkles: 'm12 2 2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5ZM20 2v4M18 4h4',
+  smile: 'M21 12a9 9 0 1 0-18 0 9 9 0 0 0 18 0ZM8 9h.1M16 9h.1M7 14c2 4 8 4 10 0',
+  rain: 'M6 14a4 4 0 1 1 1-8 6 6 0 0 1 11 1 3.5 3.5 0 0 1 0 7ZM7 17l-1 3M12 17l-1 3M17 17l-1 3',
+  gift: 'M3 8h18v4H3ZM5 12v9h14v-9M12 8v13M12 8C2 8 6 0 12 8ZM12 8c10 0 6-8 0 0',
+
   today: 'M3 17h18M5 21h14M6 13a6 6 0 0 1 12 0M12 2v3M3 6l2 2M21 6l-2 2',
   wellness: 'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z',
   quests: 'M9 5H5v16h14V5h-4M9 3h6v4H9ZM8 14l3 3 5-6',
@@ -40,7 +56,7 @@ export function SunriseIcon({ name, color = sunrise.ink, size = 24 }) {
 
 export function ToolRow({ icon, title, subtitle, onPress, tint = sunrise.purpleTint, color = sunrise.purple }) {
   return <TouchableOpacity style={ui.row} onPress={onPress} accessibilityRole="button" accessibilityLabel={`${title}${subtitle ? `. ${subtitle}` : ''}`}>
-    <View style={[ui.iconTile, { backgroundColor: tint }]}><SunriseIcon name={icon} color={color} /></View>
+    <MotionIcon active><View style={[ui.iconTile, { backgroundColor: tint }]}><SunriseIcon name={icon} color={color} /></View></MotionIcon>
     <View style={ui.rowText}><Text style={ui.rowTitle}>{title}</Text>{!!subtitle && <Text style={ui.subtitle}>{subtitle}</Text>}</View>
     <SunriseIcon name="arrow" size={18} color={sunrise.muted} />
   </TouchableOpacity>;
@@ -53,12 +69,12 @@ export function DashboardSection({ title, subtitle, expanded, onToggle, children
       <View style={ui.rowText}><Text style={ui.title}>{title}</Text>{!!subtitle && <Text style={ui.subtitle}>{subtitle}</Text>}</View>
       <SunriseIcon name={expanded ? 'up' : 'down'} size={20} />
     </TouchableOpacity>
-    {expanded && <View style={ui.sectionBody}>{children}</View>}
+    {expanded && <MotionScreen screenKey={title} style={{flex:0}}><View style={ui.sectionBody}>{children}</View></MotionScreen>}
   </View>;
 }
 
 export const ui = StyleSheet.create({
-  page: { flex: 1, backgroundColor: sunrise.background },
+  page: { flex: 1, backgroundColor: 'transparent' },
   pageContent: { padding: 16, paddingBottom: 32 },
   card: { backgroundColor: '#FFFFFF', borderRadius: 22, borderWidth: 1, borderColor: sunrise.border, marginBottom: 16, overflow: 'hidden' },
   title: { color: sunrise.ink, fontSize: 19, fontWeight: '800' },

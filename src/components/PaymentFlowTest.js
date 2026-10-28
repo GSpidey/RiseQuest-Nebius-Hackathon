@@ -1,14 +1,6 @@
+import { AppAlert as Alert } from './AppModal';
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  SafeAreaView,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { MonetizationService } from '../utils/MonetizationService';
 import { GoogleLocationService } from '../services/GoogleLocationService';
@@ -401,3 +393,4 @@ const styles = StyleSheet.create({
 });
 
 export default PaymentFlowTest;
+

@@ -1,16 +1,8 @@
+import ModalHeading from './ModalHeading';
+import Modal, { AppAlert as Alert } from './AppModal';
+import { sunrise } from './SunriseUI';
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  SafeAreaView,
-  Alert,
-  Modal,
-  FlatList,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView, FlatList, ActivityIndicator } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { UserProfileService } from '../models/RiseQuestModels';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -445,7 +437,7 @@ const RisePointsWallet = ({ userProfile }) => {
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
-        colors={['#667eea', '#764ba2']}
+        colors={[sunrise.background, sunrise.orangeTint]}
         style={styles.header}
       >
         <Text style={styles.headerTitle}>Rise Points Wallet</Text>
@@ -517,7 +509,7 @@ const RisePointsWallet = ({ userProfile }) => {
       >
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Rewards Store</Text>
+            <View style={{flex:1,paddingTop:8}}><ModalHeading title='Rewards Store' icon="star"/></View>
             <TouchableOpacity onPress={() => setShowingStore(false)}>
               <Text style={styles.modalClose}>Done</Text>
             </TouchableOpacity>
@@ -538,7 +530,7 @@ const RisePointsWallet = ({ userProfile }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: sunrise.background,
   },
   loadingContainer: {
     flex: 1,
@@ -558,7 +550,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
+    color: sunrise.ink,
     marginBottom: 20,
   },
   balanceContainer: {
@@ -566,17 +558,17 @@ const styles = StyleSheet.create({
   },
   balanceLabel: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.8)',
+    color: sunrise.muted,
     marginBottom: 5,
   },
   balanceAmount: {
     fontSize: 48,
     fontWeight: 'bold',
-    color: '#fff',
+    color: sunrise.ink,
   },
   balanceSubtext: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
+    color: sunrise.muted,
   },
   content: {
     flex: 1,
@@ -606,7 +598,7 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: 12,
-    color: '#333',
+    color: sunrise.ink,
     textAlign: 'center',
   },
   actionPoints: {
@@ -617,7 +609,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: sunrise.ink,
     marginBottom: 15,
   },
   earningGuide: {
@@ -636,7 +628,7 @@ const styles = StyleSheet.create({
   },
   earningAction: {
     fontSize: 14,
-    color: '#333',
+    color: sunrise.ink,
     flex: 1,
   },
   earningPoints: {
@@ -668,7 +660,7 @@ const styles = StyleSheet.create({
   },
   transactionDescription: {
     fontSize: 14,
-    color: '#333',
+    color: sunrise.ink,
   },
   transactionDate: {
     fontSize: 12,
@@ -686,9 +678,10 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: sunrise.background,
   },
   modalHeader: {
+    backgroundColor:'#FFF0DB',borderBottomLeftRadius:26,borderBottomRightRadius:26,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -700,11 +693,11 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: sunrise.ink,
   },
   modalClose: {
     fontSize: 16,
-    color: '#667eea',
+    color: '#9B4B00',
   },
   storeList: {
     padding: 20,
@@ -729,7 +722,7 @@ const styles = StyleSheet.create({
   storeItemName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: sunrise.ink,
     flex: 1,
   },
   priceTag: {
@@ -738,7 +731,7 @@ const styles = StyleSheet.create({
     borderRadius: 15,
   },
   priceText: {
-    color: '#fff',
+    color: sunrise.ink,
     fontSize: 14,
     fontWeight: 'bold',
   },
@@ -763,7 +756,7 @@ const styles = StyleSheet.create({
     color: '#FF9800',
   },
   buyButton: {
-    backgroundColor: '#667eea',
+    backgroundColor: sunrise.orange,
     padding: 12,
     borderRadius: 10,
     alignItems: 'center',
@@ -772,7 +765,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ccc',
   },
   buyButtonText: {
-    color: '#fff',
+    color: sunrise.ink,
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -782,3 +775,4 @@ const styles = StyleSheet.create({
 });
 
 export default RisePointsWallet;
+

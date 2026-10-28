@@ -1,21 +1,19 @@
 const crypto = require('crypto');
 
-const COSMETICS = Object.freeze({ theme_nature: 200, theme_space: 200, theme_ocean: 200,
-  theme_urban: 350, theme_zen: 350, sound_birds: 120, sound_rain: 120,
-  sound_motivational: 220, anim_sparkles: 150, anim_fireworks: 250,
-  badge_early_bird: 80, badge_streak_master: 150, bundle_starter: 450, bundle_premium: 900 });
+const COSMETICS = Object.freeze(Object.fromEntries(require('./cosmeticCatalog').CATALOG.map(item => [item.id, item.price])));
 
 function receipt(userId, type, key) {
   return `reward_${crypto.createHash('sha256').update(JSON.stringify([userId, type, key])).digest('hex')}`;
 }
 
-async function rewardFor(prisma, userId, reason, metadata = {}) {
-  const day = new Date().toISOString().slice(0, 10);
+async function rewardFor(prisma, userId, reason, metadata = {}, now = new Date()) {
+  metadata = metadata && typeof metadata === 'object' ? metadata : {};
+  const day = now.toISOString().slice(0, 10);
   const since = new Date(`${day}T00:00:00Z`);
   const rules = {
-    'creating a new quest': ['quest_created', 15],
-    'completing a quest step': ['quest_step', 5],
-    'completing a full quest': ['quest_completed', 50],
+    'creating a new quest': ['quest_created', 1],
+    'completing a quest step': ['quest_step', 1],
+    'completing a full quest': ['quest_completed', 3],
   };
   let type, amount, key;
   if (rules[reason]) {
@@ -30,22 +28,22 @@ async function rewardFor(prisma, userId, reason, metadata = {}) {
       key = step.id;
     }
   } else if (reason === 'Daily login bonus' || metadata.type === 'daily_login') {
-    type = 'daily_login'; amount = 10; key = day;
+    type = 'daily_login'; amount = 2; key = day;
   } else if (reason === 'waking up on time' || metadata.type === 'alarm_completion') {
     const event = await prisma.alarmEvent.findFirst({ where: { userId, type: 'dismiss', createdAt: { gte: since } }, orderBy: { createdAt: 'desc' } });
     if (!event) throw new Error('A completed alarm is required for this reward');
-    type = 'alarm_completion'; amount = 10; key = day;
+    type = 'alarm_completion'; amount = 3; key = day;
   } else if (reason === 'completing mini-game challenge' || metadata.type === 'snooze_challenge') {
     const event = await prisma.alarmEvent.findFirst({ where: { userId, type: 'challenge_completed', createdAt: { gte: since } } });
     if (!event) throw new Error('A completed challenge is required for this reward');
-    type = 'challenge_completed'; amount = 25; key = day;
+    type = 'challenge_completed'; amount = 2; key = day;
   } else if (/^\d+-day streak milestone$/.test(reason) || metadata.type === 'streak_bonus') {
-    const events = await prisma.alarmEvent.findMany({ where: { userId, type: 'dismiss', createdAt: { gte: new Date(Date.now() - 60 * 86400000) } }, select: { createdAt: true } });
+    const events = await prisma.alarmEvent.findMany({ where: { userId, type: 'dismiss', createdAt: { gte: new Date(now.getTime() - 60 * 86400000) } }, select: { createdAt: true } });
     const days = new Set(events.map(e => e.createdAt.toISOString().slice(0, 10)));
     let streak = 0;
     while (days.has(new Date(since.getTime() - streak * 86400000).toISOString().slice(0, 10))) streak++;
     if (!streak || streak % 7 !== 0) throw new Error('Streak milestone not reached');
-    type = 'streak'; amount = 50; key = day;
+    type = 'streak'; amount = 10; key = day;
   } else {
     throw new Error('Unsupported reward event');
   }
@@ -63,4 +61,22 @@ function spendFor(body) {
   throw new Error('Select an item from the store before spending points');
 }
 
-module.exports = { COSMETICS, receipt, rewardFor, spendFor };
+// Called inside the same per-user wallet lock as purchases and AI debits.
+const DAILY_REWARD_CAP = 20;
+async function awardReward(tx, userId, reason, metadata, now = new Date()) {
+  const reward = await rewardFor(tx, userId, reason, metadata, now);
+  const previous = await tx.risePointsTransaction.findUnique({ where: { id: reward.id } });
+  const balance = () => tx.risePointsBalance.findUnique({ where: { userId } });
+  if (previous) return { balance: (await balance())?.balance || 0, awarded: 0, alreadyClaimed: true };
+  const since = new Date(now.toISOString().slice(0, 10) + 'T00:00:00Z');
+  const earned = await tx.risePointsTransaction.aggregate({ where: { userId, id: { startsWith: 'reward_' },
+    delta: { gt: 0 }, createdAt: { gte: since } }, _sum: { delta: true } });
+  const amount = Math.max(0, Math.min(reward.amount, DAILY_REWARD_CAP - (earned._sum.delta || 0)));
+  // A capped attempt is recorded, so saving it for a later day cannot bypass the cap.
+  await tx.risePointsTransaction.create({ data: { id: reward.id, userId, delta: amount, reason: reward.reason,
+    metadata: { type: reward.type, day: now.toISOString().slice(0, 10), capped: amount < reward.amount } } });
+  const wallet = await tx.risePointsBalance.upsert({ where: { userId }, create: { userId, balance: amount },
+    update: { balance: { increment: amount } } });
+  return { balance: wallet.balance, awarded: amount, dailyCap: DAILY_REWARD_CAP };
+}
+module.exports = { COSMETICS, receipt, rewardFor, spendFor, awardReward, DAILY_REWARD_CAP };

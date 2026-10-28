@@ -1,5 +1,6 @@
+import { AppAlert as Alert } from '../services/dialogQueue';
 import { getAuthToken } from './AuthTokenStorage';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { getBackendBaseUrl } from '../config/backendConfig';
@@ -213,3 +214,4 @@ export const GoogleFitService = {
     };
   },
 };
+

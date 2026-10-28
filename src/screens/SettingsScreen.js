@@ -1,3 +1,6 @@
+import Modal, {AppAlert as Alert} from '../components/AppModal';
+import { featureApi } from '../features/api';
+import { signInWithGoldenEpics, cancelGoldenSignIn } from '../services/GoldenAuthService';
 import { getAuthToken, authHeaders } from '../services/AuthTokenStorage';
 import { signInWithApple } from '../services/AppleAuthService';
 import React, { useState, useEffect, useRef } from 'react';
@@ -8,8 +11,6 @@ import {
   TouchableOpacity,
   ScrollView,
   Switch,
-  Alert,
-  Modal,
   FlatList,
   TextInput,
   Image,
@@ -29,11 +30,36 @@ import { MonetizationService } from '../utils/MonetizationService';
 import { pick, types as docTypes } from '@react-native-documents/picker';
 import { clearAccountCaches } from '../services/accountCache';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import KeyboardSurface from '../components/KeyboardSurface';
 import ModalHeading from '../components/ModalHeading';
 import { sunrise } from '../components/SunriseUI';
 
+const SettingSection = ({ title, children }) => (
+  <View style={styles.section}>
+    <Text style={styles.sectionTitle}>{title}</Text>
+    {children}
+  </View>
+);
+
+const SettingRow = ({ label, value, onValueChange, description }) => (
+  <View style={styles.settingRow}>
+    <View style={styles.settingInfo}>
+      <Text style={styles.settingLabel}>{label}</Text>
+      {description && <Text style={styles.settingDescription}>{description}</Text>}
+    </View>
+    <Switch
+      value={value}
+      onValueChange={onValueChange}
+      trackColor={{ false: '#e2e8f0', true: sunrise.orange }}
+      thumbColor={value ? '#ffffff' : '#cbd5e0'}
+    />
+  </View>
+);
+
 export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms, onSignOut, onUpdateProfile, onSecretAdmin }) {
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [goldenLinking, setGoldenLinking] = useState(false);
+  useEffect(() => () => cancelGoldenSignIn(), []);
   const [savingOptionalAds, setSavingOptionalAds] = useState(false);
   const adAccountRef = useRef(userProfile?.email);
   adAccountRef.current = userProfile?.email;
@@ -121,6 +147,9 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [editProfile, setEditProfile] = useState(null);
   const [passwordCurrent, setPasswordCurrent] = useState('');
+  const [passwordState,setPasswordState]=useState(null);
+  const [passwordNotice,setPasswordNotice]=useState('');
+  useEffect(()=>{if(!showEditProfileModal)return;let active=true;setPasswordState(null);setPasswordNotice('');featureApi('/api/me').then(data=>{if(active)setPasswordState(Boolean(data.user?.hasPassword));}).catch(()=>{if(active)setPasswordNotice('Could not check your password settings. Reopen this screen to try again.');});return()=>{active=false;};},[showEditProfileModal]);
   const [passwordNew, setPasswordNew] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
@@ -347,16 +376,16 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
       const { json, text } = await readJsonSafe(resp);
       if (!resp.ok) {
         if (resp.status === 404) {
-          throw new Error('Your backend is missing /api/auth/set-password (needs redeploy).');
+          throw new Error('Password updates are temporarily unavailable. Try again shortly.');
         }
 
         if (!json && typeof text === 'string' && text.trim().startsWith('<')) {
-          throw new Error(`Failed to set password (HTTP ${resp.status}). The server returned HTML (likely a missing endpoint or reverse-proxy error).`);
+          throw new Error('Password updates are temporarily unavailable. Try again shortly.');
         }
         throw new Error(json?.error || 'Failed to set password');
       }
 
-      Alert.alert('Password', 'Password saved successfully.');
+      setPasswordState(true);setPasswordNotice('Password updated.');
       setPasswordCurrent('');
       setPasswordNew('');
       setPasswordConfirm('');
@@ -440,7 +469,7 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
 
   const EditProfileModal = () => (
     <Modal visible={showEditProfileModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowEditProfileModal(false)}>
-      <SafeAreaProvider><SafeAreaView style={styles.modalContainer}>
+      <SafeAreaProvider><SafeAreaView style={styles.modalContainer}><KeyboardSurface>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Your profile</Text>
           <TouchableOpacity accessibilityRole="button" style={styles.closeButton} onPress={() => setShowEditProfileModal(false)}>
@@ -448,7 +477,7 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+        <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
           <ModalHeading title="Make it yours" description="Personal details and preferences, all in one place." icon="star" />
           {!editProfile ? null : (
             <>
@@ -508,7 +537,7 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
                 <Switch
                   value={editProfile.reducedSensory}
                   onValueChange={(v) => setEditProfile(prev => ({ ...prev, reducedSensory: v }))}
-                  trackColor={{ false: '#e2e8f0', true: '#667eea' }}
+                  trackColor={{ false: '#e2e8f0', true: sunrise.orange }}
                   thumbColor={editProfile.reducedSensory ? '#ffffff' : '#cbd5e0'}
                 />
               </View>
@@ -517,7 +546,7 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
                 <Switch
                   value={editProfile.dyslexiaFriendly}
                   onValueChange={(v) => setEditProfile(prev => ({ ...prev, dyslexiaFriendly: v }))}
-                  trackColor={{ false: '#e2e8f0', true: '#667eea' }}
+                  trackColor={{ false: '#e2e8f0', true: sunrise.orange }}
                   thumbColor={editProfile.dyslexiaFriendly ? '#ffffff' : '#cbd5e0'}
                 />
               </View>
@@ -526,7 +555,7 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
                 <Switch
                   value={editProfile.captionsEnabled}
                   onValueChange={(v) => setEditProfile(prev => ({ ...prev, captionsEnabled: v }))}
-                  trackColor={{ false: '#e2e8f0', true: '#667eea' }}
+                  trackColor={{ false: '#e2e8f0', true: sunrise.orange }}
                   thumbColor={editProfile.captionsEnabled ? '#ffffff' : '#cbd5e0'}
                 />
               </View>
@@ -536,7 +565,7 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
                 <Switch
                   value={Boolean(editProfile.ttsEnabled)}
                   onValueChange={(v) => setEditProfile(prev => ({ ...prev, ttsEnabled: v }))}
-                  trackColor={{ false: '#e2e8f0', true: '#667eea' }}
+                  trackColor={{ false: '#e2e8f0', true: sunrise.orange }}
                   thumbColor={editProfile.ttsEnabled ? '#ffffff' : '#cbd5e0'}
                 />
               </View>
@@ -553,7 +582,7 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
                         ttsMode: v ? 'cloud' : 'device',
                         ttsVoice: v ? (prev.ttsVoice || 'en-US-JennyNeural') : '',
                       }))}
-                      trackColor={{ false: '#e2e8f0', true: '#667eea' }}
+                      trackColor={{ false: '#e2e8f0', true: sunrise.orange }}
                       thumbColor={String(editProfile.ttsMode || 'device') === 'cloud' ? '#ffffff' : '#cbd5e0'}
                     />
                   </View>
@@ -585,7 +614,7 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
                 <Switch
                   value={editProfile.supportEnabled}
                   onValueChange={(v) => setEditProfile(prev => ({ ...prev, supportEnabled: v }))}
-                  trackColor={{ false: '#e2e8f0', true: '#667eea' }}
+                  trackColor={{ false: '#e2e8f0', true: sunrise.orange }}
                   thumbColor={editProfile.supportEnabled ? '#ffffff' : '#cbd5e0'}
                 />
               </View>
@@ -637,18 +666,10 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
               </View>
 
               <Text style={styles.editSectionTitle}>Password</Text>
-              {editProfile.authProvider === 'google' && (
-                <Text style={styles.editHint}>
-                  For account security, set a password so you can sign in without Google if needed.
-                </Text>
-              )}
-              <TextInput
-                value={passwordCurrent}
-                onChangeText={setPasswordCurrent}
-                style={styles.editInput}
-                placeholder="Current password (if you already set one)"
-                secureTextEntry
-              />
+              <Text style={styles.editHint}>{passwordState===null?'Checking your password settings…':passwordState?'Enter your current password, then choose a new one.':'Create a password to sign in with your email as well.'}</Text>
+              {passwordState===true && <TextInput value={passwordCurrent} onChangeText={setPasswordCurrent}
+                style={styles.editInput} placeholder="Current password" accessibilityLabel="Current password" secureTextEntry/>}
+              {!!passwordNotice && <Text accessibilityLiveRegion="polite" style={styles.editHint}>{passwordNotice}</Text>}
               <TextInput
                 value={passwordNew}
                 onChangeText={setPasswordNew}
@@ -663,7 +684,7 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
                 placeholder="Confirm new password"
                 secureTextEntry
               />
-              <TouchableOpacity style={styles.savePasswordButton} onPress={setOrChangePassword}>
+              <TouchableOpacity style={[styles.savePasswordButton,passwordState===null&&{opacity:.5}]} disabled={passwordState===null} onPress={setOrChangePassword}>
                 <Text style={styles.savePasswordText}>Save Password</Text>
               </TouchableOpacity>
 
@@ -677,7 +698,7 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
             </>
           )}
         </ScrollView>
-      </SafeAreaView></SafeAreaProvider>
+      </KeyboardSurface></SafeAreaView></SafeAreaProvider>
     </Modal>
   );
 
@@ -802,28 +823,6 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
     );
   };
 
-  const SettingSection = ({ title, children }) => (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {children}
-    </View>
-  );
-
-  const SettingRow = ({ label, value, onValueChange, description }) => (
-    <View style={styles.settingRow}>
-      <View style={styles.settingInfo}>
-        <Text style={styles.settingLabel}>{label}</Text>
-        {description && <Text style={styles.settingDescription}>{description}</Text>}
-      </View>
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        trackColor={{ false: '#e2e8f0', true: '#667eea' }}
-        thumbColor={value ? '#ffffff' : '#cbd5e0'}
-      />
-    </View>
-  );
-
   const EmergencyContactsModal = () => (
     <Modal
       visible={showEmergencyModal}
@@ -831,7 +830,7 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
       presentationStyle="pageSheet"
       onRequestClose={() => setShowEmergencyModal(false)}
     >
-      <SafeAreaProvider><SafeAreaView style={styles.modalContainer}>
+      <SafeAreaProvider><SafeAreaView style={styles.modalContainer}><KeyboardSurface>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Your contacts</Text>
           <TouchableOpacity
@@ -869,7 +868,7 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
             <Text style={styles.addContactText}>➕ Add Emergency Contact</Text>
           </TouchableOpacity>
         </ScrollView>
-      </SafeAreaView></SafeAreaProvider>
+      </KeyboardSurface></SafeAreaView></SafeAreaProvider>
     </Modal>
   );
 
@@ -880,7 +879,7 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
       presentationStyle="pageSheet"
       onRequestClose={() => setShowContactsList(false)}
     >
-      <SafeAreaProvider><SafeAreaView style={styles.modalContainer}>
+      <SafeAreaProvider><SafeAreaView style={styles.modalContainer}><KeyboardSurface>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Select Contact</Text>
           <TouchableOpacity
@@ -913,13 +912,13 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
             </TouchableOpacity>
           )}
         />
-      </SafeAreaView></SafeAreaProvider>
+      </KeyboardSurface></SafeAreaView></SafeAreaProvider>
     </Modal>
   );
 
   return (
-    <LinearGradient colors={['#667eea', '#764ba2']} style={styles.container}>
-      <ScrollView style={styles.content}>
+    <LinearGradient colors={[sunrise.background, sunrise.orangeTint]} style={styles.container}>
+      <ScrollView style={styles.content} contentContainerStyle={styles.contentBody} keyboardShouldPersistTaps="handled">
         {EditProfileModal()}
         {/* User Profile Section */}
         {userProfile && (
@@ -1217,6 +1216,14 @@ export default function SettingsScreen({ userProfile, onShowSupport, onShowTerms
 
         {/* Support & Legal */}
         <SettingSection title="🛠️ Support & Legal">
+          {!userProfile?.isGuest && userProfile?.authProvider !== 'child' && <TouchableOpacity style={styles.actionRow} accessibilityRole="button" onPress={async () => {
+            if (goldenLinking) { cancelGoldenSignIn(); return; }
+            setGoldenLinking(true);
+            try { await signInWithGoldenEpics({link:true}); Alert.alert('GoldenEpics linked', 'Use GoldenEpics to sign in to this same RiseQuest account.'); }
+            catch(error) { if(error.code !== 'CANCELED') Alert.alert('Link GoldenEpics', error.message || 'Please try again.'); }
+            finally { setGoldenLinking(false); }
+          }}><Text style={styles.actionLabel}>{goldenLinking ? 'Cancel GoldenEpics linking' : 'Link Sign in with GoldenEpics'}</Text><Text style={styles.actionSubtext}>Keep your account, saved settings and purchases</Text></TouchableOpacity>}
+
           {Platform.OS === 'ios' && !userProfile?.isGuest && userProfile?.authProvider !== 'child' && <TouchableOpacity
             style={styles.actionRow} accessibilityRole="button" onPress={async () => {
               try { await signInWithApple({ link: true }); Alert.alert('Apple linked', 'You can now sign in to this RiseQuest account with Apple.'); }
@@ -1331,36 +1338,35 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
+  content: { flex: 1 },
+  contentBody: { padding: 20, paddingBottom: 40 },
 
   editLabel: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#0f172a',
+    color: sunrise.ink,
     marginTop: 12,
     marginBottom: 6,
   },
   editInput: {
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: sunrise.border,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     backgroundColor: '#fff',
+    color: sunrise.ink,
   },
   editSectionTitle: {
     marginTop: 18,
     fontSize: 16,
     fontWeight: '900',
-    color: '#0f172a',
+    color: sunrise.ink,
   },
   editHint: {
     marginTop: 8,
     fontSize: 13,
-    color: '#475569',
+    color: sunrise.muted,
   },
   profileMediaRow: {
     flexDirection: 'row',
@@ -1372,9 +1378,9 @@ const styles = StyleSheet.create({
     height: 64,
     borderRadius: 32,
     overflow: 'hidden',
-    backgroundColor: '#f1f5f9',
+    backgroundColor: sunrise.background,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: sunrise.border,
   },
   avatarImage: {
     width: 64,
@@ -1393,7 +1399,7 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   mediaButton: {
-    backgroundColor: '#0f172a',
+    backgroundColor: sunrise.orangeTint,
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 12,
@@ -1404,7 +1410,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   mediaButtonText: {
-    color: '#fff',
+    color: sunrise.ink,
     fontWeight: '900',
   },
   rowBetween: {
@@ -1417,64 +1423,64 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 12,
     fontSize: 14,
-    color: '#0f172a',
+    color: sunrise.ink,
     fontWeight: '700',
   },
   pill: {
     alignSelf: 'flex-start',
-    backgroundColor: '#f1f5f9',
+    backgroundColor: sunrise.background,
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
     marginRight: 8,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: sunrise.border,
   },
   pillActive: {
-    backgroundColor: '#e0e7ff',
-    borderColor: '#c7d2fe',
+    backgroundColor: sunrise.orangeTint,
+    borderColor: sunrise.orange,
   },
   pillText: {
-    color: '#0f172a',
+    color: sunrise.ink,
     fontWeight: '800',
     fontSize: 13,
   },
   pillTextActive: {
-    color: '#1e293b',
+    color: sunrise.ink,
   },
   savePasswordButton: {
     marginTop: 10,
-    backgroundColor: '#0f172a',
+    backgroundColor: sunrise.orangeTint,
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',
   },
   savePasswordText: {
-    color: '#fff',
+    color: sunrise.ink,
     fontWeight: '900',
   },
   primarySaveButton: {
     marginTop: 16,
-    backgroundColor: '#667eea',
+    backgroundColor: sunrise.orangeTint,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
     marginBottom: 30,
   },
   primarySaveText: {
-    color: '#fff',
+    color: sunrise.ink,
     fontWeight: '900',
   },
   diagnosticButton: {
     marginTop: 10,
-    backgroundColor: '#0f172a',
+    backgroundColor: sunrise.orangeTint,
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',
   },
   diagnosticButtonText: {
-    color: '#fff',
+    color: sunrise.ink,
     fontWeight: '900',
   },
   diagnosticLink: {
@@ -1482,11 +1488,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   diagnosticLinkText: {
-    color: '#667eea',
+    color: '#9B4B00',
     fontWeight: '900',
   },
   section: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: sunrise.border,
     borderRadius: 15,
     padding: 20,
     marginBottom: 20,
@@ -1494,7 +1502,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#fff',
+    color: sunrise.ink,
     marginBottom: 15,
   },
   settingRow: {
@@ -1503,7 +1511,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
+    borderBottomColor: sunrise.border,
   },
   settingInfo: {
     flex: 1,
@@ -1512,29 +1520,29 @@ const styles = StyleSheet.create({
   settingLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#fff',
+    color: sunrise.ink,
     marginBottom: 2,
   },
   settingDescription: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.7)',
+    color: sunrise.muted,
   },
-  configButton: {
   visibilityChip: {
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: sunrise.background,
   },
   visibilityChipActive: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: sunrise.orangeTint,
   },
   visibilityChipText: {
-    color: 'white',
+    color: sunrise.ink,
     fontWeight: '700',
     fontSize: 12,
   },
-    backgroundColor: 'rgba(255,255,255,0.15)',
+  configButton: {
+    backgroundColor: sunrise.orangeTint,
     borderRadius: 12,
     padding: 15,
     flexDirection: 'row',
@@ -1545,11 +1553,11 @@ const styles = StyleSheet.create({
   configButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#fff',
+    color: sunrise.ink,
   },
   configButtonArrow: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.7)',
+    color: sunrise.muted,
   },
   modalContainer: {
     flex: 1,
@@ -1561,7 +1569,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderBottomColor: sunrise.border,
     backgroundColor: '#fff',
   },
   modalTitle: {
@@ -1569,10 +1577,10 @@ const styles = StyleSheet.create({
     marginRight: 12,
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#2d3748',
+    color: sunrise.ink,
   },
   closeButton: {
-    backgroundColor: '#6544BC',
+    backgroundColor: sunrise.orangeTint,
     borderRadius: 16,
     minHeight: 48,
     justifyContent: 'center',
@@ -1580,7 +1588,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   closeButtonText: {
-    color: '#fff',
+    color: sunrise.ink,
     fontWeight: '600',
   },
   modalContent: {
@@ -1592,7 +1600,7 @@ const styles = StyleSheet.create({
   modalBody: { padding: 20, paddingBottom: 40 },
   modalDescription: {
     fontSize: 16,
-    color: '#4a5568',
+    color: sunrise.ink,
     marginBottom: 20,
     textAlign: 'center',
   },
@@ -1616,16 +1624,16 @@ const styles = StyleSheet.create({
   contactName: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#2d3748',
+    color: sunrise.ink,
   },
   contactPhone: {
     fontSize: 14,
-    color: '#4a5568',
+    color: sunrise.ink,
     marginTop: 2,
   },
   contactRelation: {
     fontSize: 12,
-    color: '#718096',
+    color: sunrise.muted,
     marginTop: 2,
   },
   removeButton: {
@@ -1640,7 +1648,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   addContactButton: {
-    backgroundColor: '#e6fffa',
+    backgroundColor: sunrise.tealTint,
     borderRadius: 12,
     padding: 15,
     alignItems: 'center',
@@ -1658,20 +1666,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     padding: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderBottomColor: sunrise.border,
   },
   contactItemName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#2d3748',
+    color: sunrise.ink,
   },
   contactItemPhone: {
     fontSize: 14,
-    color: '#4a5568',
+    color: sunrise.ink,
     marginTop: 2,
   },
   aboutSection: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: sunrise.background,
     borderRadius: 15,
     padding: 20,
     alignItems: 'center',
@@ -1680,39 +1688,39 @@ const styles = StyleSheet.create({
   aboutTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
+    color: sunrise.ink,
     marginBottom: 10,
   },
   aboutText: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.8)',
+    color: sunrise.muted,
     marginBottom: 15,
   },
   aboutDescription: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
+    color: sunrise.muted,
     textAlign: 'center',
     lineHeight: 20,
   },
   actionRow: {
     paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
+    borderBottomColor: sunrise.border,
   },
   actionLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#fff',
+    color: sunrise.ink,
     marginBottom: 2,
   },
   actionSubtext: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.7)',
+    color: sunrise.muted,
   },
-  
+
   // Profile Styles
   profileCard: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: sunrise.orangeTint,
     borderRadius: 12,
     padding: 15,
     marginBottom: 10,
@@ -1720,16 +1728,16 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: sunrise.ink,
     marginBottom: 5,
   },
   profileEmail: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
+    color: sunrise.muted,
     marginBottom: 5,
   },
   profileAge: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.7)',
+    color: sunrise.muted,
   },
 });

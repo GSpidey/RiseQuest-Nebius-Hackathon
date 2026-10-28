@@ -1,0 +1,12 @@
+diff --git a/node_modules/@react-native-google-signin/google-signin/android/src/main/java/com/reactnativegooglesignin/RNGoogleSigninButtonViewManager.java b/node_modules/@react-native-google-signin/google-signin/android/src/main/java/com/reactnativegooglesignin/RNGoogleSigninButtonViewManager.java
+--- a/node_modules/@react-native-google-signin/google-signin/android/src/main/java/com/reactnativegooglesignin/RNGoogleSigninButtonViewManager.java
++++ b/node_modules/@react-native-google-signin/google-signin/android/src/main/java/com/reactnativegooglesignin/RNGoogleSigninButtonViewManager.java
+@@ -64,7 +64,7 @@
+         if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
+             return mDelegate;
+         } else {
+-            return null;
++            return super.getDelegate();
+         }
+     }
+ 

@@ -1,10 +1,11 @@
+import { AppAlert as Alert } from './components/AppModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert, Linking } from 'react-native';
+import { Linking } from 'react-native';
 import { getBackendBaseUrl } from './config/backendConfig';
 
 class PaymentService {
   constructor() {
-    this.supportEmail = 'Risequestsupport@goldenepics.com';
+    this.supportEmail = 'support@example.invalid';
     this.paymentProviders = {
       stripe: true,
       paypal: true,
@@ -352,3 +353,4 @@ Thank you!
 }
 
 export default new PaymentService();
+

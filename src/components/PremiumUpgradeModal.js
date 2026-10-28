@@ -1,25 +1,20 @@
+import ModalHeading from './ModalHeading';
+import Modal from './AppModal';
+import { sunrise } from './SunriseUI';
+import { useRiseQuestDialog } from './RiseQuestDialog';
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Alert,
-  Linking,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MonetizationService } from '../utils/MonetizationService';
 import { useStripePayments } from '../services/StripePaymentService';
 import StripePaymentService from '../services/StripePaymentService';
 import { usesStoreBilling, restoreStorePurchases } from '../services/StorePurchaseService';
+import { openLegalPage } from '../config/legalLinks';
 import { getBackendBaseUrl } from '../config/backendConfig';
 
 export default function PremiumUpgradeModal({ visible, onClose, source = 'general', userProfile }) {
+  const {alert:notify,dialog}=useRiseQuestDialog();
   const insets = useSafeAreaInsets();
   const [selectedTier, setSelectedTier] = useState('premium'); // premium | family
   const [selectedPlan, setSelectedPlan] = useState('yearly'); // monthly | yearly | family_monthly | family_yearly
@@ -60,10 +55,10 @@ export default function PremiumUpgradeModal({ visible, onClose, source = 'genera
 
   const getSourceMessage = () => {
     const messages = {
-      locked_mini_game: '🎮 Unlock all mini-games and take your morning challenges to the next level!',
-      streak_protection: '🔥 Protect your amazing streak and unlock unlimited tracking!',
+      locked_mini_game: '🎮 Unlock adaptive mini-games and take your morning challenges to the next level!',
+      streak_protection: 'Build your routine with Premium extras.',
       missed_alarm: 'Explore more options for your wake-up routine.',
-      weather: '🌤️ Get complete weather insights for perfect wake-up timing!',
+      weather: 'Explore more ways to personalize your mornings.',
       trial_expired: 'Your trial has ended. Choose a plan if you would like to keep Premium.',
       general: '👑 Upgrade to Premium and transform your mornings!',
       header: '👑 Upgrade to Premium and transform your mornings!',
@@ -76,7 +71,7 @@ export default function PremiumUpgradeModal({ visible, onClose, source = 'genera
     if (selectedTier === 'family') {
       return {
         title: '👑 RiseQuest Family',
-        subtitle: 'Share Premium benefits with your household.',
+        subtitle: 'Premium extras for you and your approved child profiles.',
       };
     }
 
@@ -145,20 +140,15 @@ export default function PremiumUpgradeModal({ visible, onClose, source = 'genera
     if (busy) return;
     setBusy(true);
     try {
-      if (planType === 'trial') {
-        const success = await MonetizationService.startFreeTrial();
-        if (success) onClose();
-        return;
-      }
 
       if (!selectedPlanHasPriceId) {
-        Alert.alert('Pricing not ready', 'Subscription pricing is not loaded yet. Please try again in a moment.');
+        notify('Pricing not ready', 'Subscription pricing is not loaded yet. Please try again in a moment.');
         return;
       }
 
       const customerEmail = userProfile?.email;
       if (!customerEmail) {
-        Alert.alert('Missing Email', 'Please sign in first so we can attach your subscription to your account.');
+        notify('Missing Email', 'Please sign in first so we can attach your subscription to your account.');
         return;
       }
 
@@ -169,23 +159,25 @@ export default function PremiumUpgradeModal({ visible, onClose, source = 'genera
         });
         onClose();
       } else if (result?.pending) {
-        Alert.alert('Purchase pending', 'The store or server is still confirming this purchase. Do not pay again. Use Restore Purchases to check it later.');
+        notify('Purchase pending', 'The store or server is still confirming this purchase. Do not pay again. Use Restore Purchases to check it later.');
       } else if (!result?.cancelled && result?.error) {
-        Alert.alert('Purchase not completed', result.error);
+        notify('Purchase not completed', result.error);
       }
     } catch (error) {
-      Alert.alert('Could not complete upgrade', error.message || 'Please try again.');
+      notify('Could not complete upgrade', error.message || 'Please try again.');
     } finally { setBusy(false); }
   };
 
+  const selectedPricing = pricing?.subscriptions?.[selectedPlan];
+  const allowance = selectedPricing?.allowance;
   const features = [
-    ...(selectedTier === 'family'
-      ? [{ icon: '👨‍👩‍👧‍👦', text: 'Family plan access', highlight: true }]
-      : []),
-    { icon: '🎮', text: 'All mini-games unlocked', highlight: true },
-    { icon: '📞', text: 'Wake-up support tools', highlight: true },
-    { icon: '🚫', text: 'Ad‑free experience', highlight: false },
-    { icon: '⚡', text: 'Priority support', highlight: false },
+    { icon: '🧩', text: 'Five adaptive mind games', detail: 'Number paths, Memory garden, Order & flow, Word rhythm and Echo trail.' },
+    { icon: '🌱', text: 'Practice that grows with you', detail: 'Six levels, saved progress and an untimed option. Difficulty responds to your recent rounds.' },
+    { icon: '🪐', text: 'Luna & Nova companions', detail: 'Choose either subscription companion for your daily talks and plans while your plan is active.' },
+    { icon: '🎙️', text: `${selectedPlan.startsWith('family') ? 200 : 100} realistic voice credits each month`, detail: 'For the adult plan holder’s companion replies. Each credit covers up to 250 characters. Resets on the 1st (UTC), including yearly plans; unused credits do not roll over. Optional extras: 5 RP per credit — 50% less than the 10 RP standard price. Alarm audio is priced separately.' },
+    { icon: '💬', text: 'Hands-free companion conversations', detail: 'Speak, hear a reply and keep talking without repeated taps. Choose from 12 realistic alarm voices. On Android, opt into chatting while switching apps, with an ongoing Stop notification. Choose your own RP limit or no session cap; paid extras always require opt-in.' },
+    { icon: '🍃', text: 'An ad-free experience', detail: 'Enjoy RiseQuest without default advertising. Optional ads remain your choice in Settings.' },
+    ...(Number.isInteger(allowance) && allowance > 0 ? [{ icon: '⭐', text: `${allowance.toLocaleString()} Rise Points per paid ${selectedPlan.includes('yearly')?'year':'month'}`, detail: 'Added once after each verified payment. Spend them on themes, sounds, celebrations and permanent companion unlocks.' }] : []),
   ];
 
   return (
@@ -196,13 +188,13 @@ export default function PremiumUpgradeModal({ visible, onClose, source = 'genera
       onRequestClose={onClose}
     >
       <SafeAreaProvider><SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <LinearGradient colors={['#667eea', '#764ba2']} style={styles.container}>
+        <LinearGradient colors={[sunrise.background, sunrise.orangeTint]} style={styles.container}>
           <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
             <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close plan options" style={styles.closeButton} onPress={onClose}>
               <Text style={styles.closeButtonText}>✕</Text>
             </TouchableOpacity>
-            <Text style={styles.title}>{tierCopy.title}</Text>
+            <ModalHeading title={tierCopy.title} icon="star"/>
             <Text style={styles.subtitle}>{getSourceMessage()}</Text>
             <Text style={styles.tierSubtext}>{tierCopy.subtitle}</Text>
           </View>
@@ -212,10 +204,14 @@ export default function PremiumUpgradeModal({ visible, onClose, source = 'genera
             {features.map((f) => (
               <View key={f.text} style={styles.featureRow}>
                 <Text style={styles.featureIcon}>{f.icon}</Text>
-                <Text style={[styles.featureText, f.highlight && styles.featureHighlight]}>{f.text}</Text>
-                {f.highlight && <Text style={styles.newBadge}>HOT</Text>}
+                <View style={{flex:1,gap:5}}><Text style={[styles.featureText,{fontWeight:'800',flex:0}]}>{f.text}</Text><Text style={{color: sunrise.ink,fontSize:13,lineHeight:20}}>{f.detail}</Text></View>
               </View>
             ))}
+          </View>
+          <View style={[styles.featuresContainer,{backgroundColor:'#FFFFFF24'}]}>
+            <Text style={styles.featuresTitle}>{selectedTier==='family'?'🏡 Room for your family':'☀️ Your everyday RiseQuest'}</Text>
+            <Text style={{color: sunrise.ink,fontSize:14,lineHeight:23}}>{selectedTier==='family'?'Your approved child profiles can use your active subscription’s adaptive games and companions. Manage their settings, review activity and approve shop requests from Family profiles. Family plans include a larger Rise Points allowance.':'Keep your alarms, original games, quests, earned medals, collection and Wake Buddies together with your Premium extras.'}</Text>
+            {selectedTier==='family'&&<Text style={{color: sunrise.ink,fontSize:12,lineHeight:19,marginTop:10}}>Parent consent and safety controls are available to every family. Rise Points are credited to the paying account; parents review and pay for approved child shop requests.</Text>}
           </View>
 
           <View style={styles.plansContainer}>
@@ -282,12 +278,7 @@ export default function PremiumUpgradeModal({ visible, onClose, source = 'genera
           </View>
 
           <View style={[styles.footer, { paddingBottom: Math.max(12, (insets?.bottom || 0) + 12) }]}>
-            {!subscription?.trialUsed && (
-              <TouchableOpacity disabled={busy} style={styles.trialButton} onPress={() => handleUpgrade('trial')}>
-                <Text style={styles.trialButtonText}>🎁 Start 7-Day FREE Trial</Text>
-                <Text style={styles.trialButtonSubtext}>No card needed. Does not renew or charge you.</Text>
-              </TouchableOpacity>
-            )}
+
 
             <TouchableOpacity disabled={busy || !selectedPlanHasPriceId} style={styles.upgradeButton} onPress={() => handleUpgrade(selectedPlan)}>
               <Text style={styles.upgradeButtonText}>
@@ -299,31 +290,33 @@ export default function PremiumUpgradeModal({ visible, onClose, source = 'genera
               <Text style={styles.laterButtonText}>Maybe Later</Text>
             </TouchableOpacity>
 
+            {pricing?.subscriptions?.[selectedPlan]?.allowance > 0 && <Text style={styles.tierSubtext}>{pricing.subscriptions[selectedPlan].allowance} RisePoints each paid billing period: 50% of the plan’s reference point equivalent. Free trials do not grant points. Annual allowances are credited once for the year.</Text>}
             <Text style={styles.tierSubtext}>Subscriptions renew automatically at the displayed price and period until canceled. Cancel in your store subscription settings before renewal. Your existing paid access remains available.</Text>
             {usesStoreBilling() && <TouchableOpacity style={styles.laterButton} disabled={busy} onPress={async () => {
               setBusy(true);
               try {
                 const result = await restoreStorePurchases();
                 setSubscription(await MonetizationService.getUserSubscription({ force: true }));
-                Alert.alert('Purchases checked', result.pending ? 'Some receipts are still being confirmed. Do not purchase again.' : 'Your verified purchases and subscription access are up to date.');
-              } catch (error) { Alert.alert('Could not restore purchases', error.message); }
+                notify('Purchases checked', result.pending ? 'Some receipts are still being confirmed. Do not purchase again.' : 'Your verified purchases and subscription access are up to date.');
+              } catch (error) { notify('Could not restore purchases', error.message); }
               finally { setBusy(false); }
             }}><Text style={styles.laterButtonText}>Restore Purchases</Text></TouchableOpacity>}
             {usesStoreBilling() && <TouchableOpacity style={styles.laterButton} onPress={() => Linking.openURL(Platform.OS === 'ios'
               ? 'https://apps.apple.com/account/subscriptions'
-              : 'https://play.google.com/store/account/subscriptions?package=com.risequest.app').catch(() => Alert.alert('Open your store', 'Manage subscriptions in your App Store or Google Play account.'))}>
+              : 'https://play.google.com/store/account/subscriptions?package=com.risequest.app').catch(() => notify('Open your store', 'Manage subscriptions in your App Store or Google Play account.'))}>
               <Text style={styles.laterButtonText}>Manage Subscriptions</Text>
             </TouchableOpacity>}
             <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 20 }}>
-              {['privacy', 'terms'].map(page => <TouchableOpacity key={page} style={styles.laterButton} onPress={async () => {
-                try { await Linking.openURL(`${await getBackendBaseUrl()}/legal/${page}`); }
-                catch (_) { Alert.alert('Could not open page', 'Please check your internet connection.'); }
-              }}><Text style={styles.laterButtonText}>{page === 'privacy' ? 'Privacy' : 'Terms'}</Text></TouchableOpacity>)}
+              {['privacy', 'eula'].map(page => <TouchableOpacity key={page} accessibilityRole="link" style={styles.laterButton} onPress={async () => {
+                try { await openLegalPage(page); }
+                catch (_) { notify('Could not open page', 'Please check your internet connection.'); }
+              }}><Text style={styles.laterButtonText}>{page === 'privacy' ? 'Privacy Policy' : 'Terms of Use (EULA)'}</Text></TouchableOpacity>)}
             </View>
           </View>
           </ScrollView>
         </LinearGradient>
       </SafeAreaView></SafeAreaProvider>
+      {dialog}
     </Modal>
   );
 }
@@ -331,6 +324,7 @@ export default function PremiumUpgradeModal({ visible, onClose, source = 'genera
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: sunrise.background,
   },
   header: {
     alignItems: 'center',
@@ -342,45 +336,45 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     width: 48,
     height: 48,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
   closeButtonText: {
-    color: '#fff',
+    color: sunrise.ink,
     fontSize: 18,
     fontWeight: 'bold',
   },
   title: {
     fontSize: 30,
     fontWeight: 'bold',
-    color: '#fff',
+    color: sunrise.ink,
     marginTop: 18,
     textAlign: 'center',
   },
   buildMarker: {
     marginTop: 6,
     fontSize: 12,
-    color: 'rgba(255,255,255,0.75)',
+    color: sunrise.muted,
     fontWeight: '700',
   },
   subtitle: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.9)',
+    color: sunrise.muted,
     textAlign: 'center',
     marginTop: 10,
     lineHeight: 22,
   },
   tierSubtext: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.78)',
+    color: sunrise.muted,
     textAlign: 'center',
     marginTop: 6,
     fontWeight: '700',
   },
   featuresContainer: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#FFFFFF',
     borderRadius: 15,
     padding: 14,
     marginHorizontal: 20,
@@ -389,7 +383,7 @@ const styles = StyleSheet.create({
   featuresTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: sunrise.ink,
     marginBottom: 10,
     textAlign: 'center',
   },
@@ -407,15 +401,15 @@ const styles = StyleSheet.create({
   featureText: {
     flex: 1,
     fontSize: 15,
-    color: 'rgba(255,255,255,0.92)',
+    color: sunrise.muted,
   },
   featureHighlight: {
-    color: '#fff',
+    color: sunrise.ink,
     fontWeight: '700',
   },
   newBadge: {
     backgroundColor: '#ff6b6b',
-    color: '#fff',
+    color: sunrise.ink,
     fontSize: 10,
     fontWeight: 'bold',
     paddingHorizontal: 6,
@@ -432,44 +426,44 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   tierChip: {
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: '#FFFFFF',
     borderRadius: 999,
     paddingHorizontal: 14,
     paddingVertical: 8,
     marginHorizontal: 6,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
+    borderColor: sunrise.border,
   },
   tierChipActive: {
-    backgroundColor: 'rgba(255,255,255,0.26)',
-    borderColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: sunrise.orangeTint,
+    borderColor: sunrise.orange,
   },
   tierChipText: {
-    color: 'rgba(255,255,255,0.85)',
+    color: sunrise.muted,
     fontWeight: '800',
   },
   tierChipTextActive: {
-    color: '#fff',
+    color: sunrise.ink,
   },
   plansTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: sunrise.ink,
     textAlign: 'center',
     marginBottom: 10,
   },
   planCard: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#FFFFFF',
     borderRadius: 15,
     padding: 16,
     marginBottom: 12,
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: sunrise.border,
     position: 'relative',
   },
   planCardSelected: {
-    borderColor: '#ffd700',
-    backgroundColor: 'rgba(255,215,0,0.18)',
+    borderColor: sunrise.orange,
+    backgroundColor: sunrise.orangeTint,
   },
   planCardPopular: {
     borderColor: '#ff6b6b',
@@ -484,7 +478,7 @@ const styles = StyleSheet.create({
     borderRadius: 15,
   },
   popularBadgeText: {
-    color: '#fff',
+    color: sunrise.ink,
     fontSize: 12,
     fontWeight: 'bold',
   },
@@ -497,7 +491,7 @@ const styles = StyleSheet.create({
   planName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: sunrise.ink,
   },
   planPricing: {
     flexDirection: 'row',
@@ -506,16 +500,16 @@ const styles = StyleSheet.create({
   planPrice: {
     fontSize: 30,
     fontWeight: 'bold',
-    color: '#fff',
+    color: sunrise.ink,
   },
   planPeriod: {
     fontSize: 15,
-    color: 'rgba(255,255,255,0.85)',
+    color: sunrise.muted,
     marginLeft: 6,
   },
   planEquivalent: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.75)',
+    color: sunrise.muted,
     marginTop: 6,
   },
   footer: {
@@ -530,24 +524,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   trialButtonText: {
-    color: '#fff',
+    color: sunrise.ink,
     fontSize: 16,
     fontWeight: 'bold',
   },
   trialButtonSubtext: {
-    color: 'rgba(255,255,255,0.9)',
+    color: sunrise.muted,
     fontSize: 13,
     marginTop: 5,
   },
   upgradeButton: {
-    backgroundColor: '#ffd700',
+    backgroundColor: sunrise.orange,
     borderRadius: 15,
     padding: 14,
     alignItems: 'center',
     marginTop: 10,
   },
   upgradeButtonText: {
-    color: '#000',
+    color: sunrise.ink,
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -556,7 +550,8 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   laterButtonText: {
-    color: 'rgba(255,255,255,0.7)',
+    color: sunrise.muted,
     fontSize: 16,
   },
 });
+

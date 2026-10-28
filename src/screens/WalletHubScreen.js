@@ -1,13 +1,8 @@
+import RechargeControls from '../features/companion/RechargeControls';
+import { AppAlert as Alert } from '../components/AppModal';
+import { sunrise } from '../components/SunriseUI';
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { useStripePayments } from '../services/StripePaymentService';
@@ -125,7 +120,7 @@ export default function WalletHubScreen({
   };
 
   return (
-    <LinearGradient colors={['#667eea', '#764ba2']} style={styles.container}>
+    <LinearGradient colors={[sunrise.background, sunrise.orangeTint]} style={styles.container}>
       <ScrollView
         contentContainerStyle={[
           styles.content,
@@ -160,7 +155,7 @@ export default function WalletHubScreen({
           <Text style={styles.sectionTitle}>🧾 Recent activity</Text>
           <Text style={styles.sectionText}>Latest Rise Points movements on your account.</Text>
 
-          {recentLoading ? <ActivityIndicator style={{ marginTop: 12 }} color="#fff" /> : null}
+          {recentLoading ? <ActivityIndicator style={{ marginTop: 12 }} color={sunrise.orange} /> : null}
 
           {!recentLoading && (!recent || recent.length === 0) ? (
             <Text style={[styles.sectionText, { marginTop: 10 }]}>
@@ -199,9 +194,11 @@ export default function WalletHubScreen({
           </TouchableOpacity>
         </View>
 
+        <RechargeControls key={userProfile?.id || userProfile?.email || 'guest'} userProfile={userProfile} onRefreshBalances={onRefreshBalances} />
+
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Buy Rise Points</Text>
-          <Text style={styles.sectionText}>Purchase Rise Points securely via Stripe.</Text>
+          <Text style={styles.sectionText}>Choose a pack to add Rise Points to your wallet.</Text>
 
           {!pricing && (
             <Text style={[styles.sectionText, { marginTop: 10 }]}>
@@ -227,7 +224,7 @@ export default function WalletHubScreen({
             </View>
           ))}
 
-          {busy && <ActivityIndicator style={{ marginTop: 12 }} color="#fff" />}
+          {busy && <ActivityIndicator style={{ marginTop: 12 }} color={sunrise.orange} />}
         </View>
       </ScrollView>
     </LinearGradient>
@@ -235,53 +232,56 @@ export default function WalletHubScreen({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: sunrise.background },
   content: { padding: 16, paddingBottom: 28 },
   card: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1, borderColor: sunrise.border,
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 14,
     marginBottom: 12,
   },
-  title: { color: 'white', fontSize: 20, fontWeight: '900' },
-  subtitle: { color: 'rgba(255,255,255,0.85)', marginTop: 6 },
+  title: { color: sunrise.ink, fontSize: 20, fontWeight: '900' },
+  subtitle: { color: sunrise.muted, marginTop: 6 },
   balanceRow: { flexDirection: 'row', marginTop: 12 },
   balanceBox: {
+    borderWidth: 1, borderColor: sunrise.border,
     flex: 1,
-    backgroundColor: 'rgba(15,23,42,0.35)',
+    backgroundColor: sunrise.orangeTint,
     borderRadius: 14,
     padding: 12,
   },
-  balanceValue: { color: 'white', fontSize: 18, fontWeight: '900' },
-  balanceLabel: { color: 'rgba(255,255,255,0.8)', marginTop: 6 },
-  sectionTitle: { color: 'white', fontSize: 16, fontWeight: '900' },
-  sectionText: { color: 'rgba(255,255,255,0.85)', marginTop: 8 },
+  balanceValue: { color: sunrise.ink, fontSize: 18, fontWeight: '900' },
+  balanceLabel: { color: sunrise.muted, marginTop: 6 },
+  sectionTitle: { color: sunrise.ink, fontSize: 16, fontWeight: '900' },
+  sectionText: { color: sunrise.muted, marginTop: 8 },
   button: {
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: sunrise.orangeTint,
+    borderWidth: 1, borderColor: sunrise.border,
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 14,
     alignItems: 'center',
   },
-  buttonText: { color: 'white', fontWeight: '900' },
+  buttonText: { color: sunrise.ink, fontWeight: '900' },
   packageRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.10)',
+    borderTopColor: sunrise.border,
   },
-  packageTitle: { color: 'white', fontWeight: '900' },
-  packageSub: { color: 'rgba(255,255,255,0.85)', marginTop: 4 },
+  packageTitle: { color: sunrise.ink, fontWeight: '900' },
+  packageSub: { color: sunrise.muted, marginTop: 4 },
   smallButton: {
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: sunrise.orange,
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 14,
     marginLeft: 10,
   },
-  smallButtonText: { color: 'white', fontWeight: '900' },
+  smallButtonText: { color: sunrise.ink, fontWeight: '900' },
 
   activityRow: {
     flexDirection: 'row',
@@ -289,9 +289,11 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.10)',
+    borderTopColor: sunrise.border,
   },
-  activityTitle: { color: 'white', fontWeight: '900' },
-  activitySub: { color: 'rgba(255,255,255,0.78)', marginTop: 4, fontSize: 12 },
-  activityDelta: { color: 'white', fontWeight: '900', marginLeft: 10 },
+  activityTitle: { color: sunrise.ink, fontWeight: '900' },
+  activitySub: { color: sunrise.muted, marginTop: 4, fontSize: 12 },
+  activityDelta: { color: sunrise.ink, fontWeight: '900', marginLeft: 10 },
 });
+
+

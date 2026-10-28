@@ -1,14 +1,7 @@
+import ModalHeading from './components/ModalHeading';
+import Modal, { AppAlert as Alert } from './components/AppModal';
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Modal,
-  Alert,
-  Linking,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 
 const ImprovementSuggestions = ({ visible, onClose }) => {
@@ -197,7 +190,7 @@ A loyal RiseQuest user
     `);
 
     const subject = encodeURIComponent('RiseQuest Feature Feedback & Suggestions');
-    const mailtoUrl = `mailto:Risequestsupport@goldenepics.com?subject=${subject}&body=${emailBody}`;
+    const mailtoUrl = `mailto:support@example.invalid?subject=${subject}&body=${emailBody}`;
     
     Linking.openURL(mailtoUrl).then(() => {
       Alert.alert(
@@ -208,7 +201,7 @@ A loyal RiseQuest user
     }).catch(() => {
       Alert.alert(
         'Email Not Available',
-        'Please send your feedback to: Risequestsupport@goldenepics.com'
+        'Please send your feedback to: support@example.invalid'
       );
     });
   };
@@ -232,10 +225,10 @@ A loyal RiseQuest user
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
+    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
       <LinearGradient colors={['#667eea', '#764ba2']} style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>💡 Future Features</Text>
+          <ModalHeading compact light title="Future Features" icon="sparkles"/>
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
             <Text style={styles.closeButtonText}>✕</Text>
           </TouchableOpacity>
@@ -499,3 +492,4 @@ const styles = StyleSheet.create({
 });
 
 export default ImprovementSuggestions;
+

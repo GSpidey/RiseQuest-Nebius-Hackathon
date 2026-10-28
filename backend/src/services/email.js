@@ -49,6 +49,17 @@ function getTransporter() {
   return cachedTransporter;
 }
 
+function passwordResetContent({ to, token, expiresAt }) {
+  const resetUrl = new URL('/admin/reset.html', 'https://api.example.invalid');
+  resetUrl.hash = new URLSearchParams({ email: to, token }).toString();
+  const expires = expiresAt instanceof Date ? expiresAt.toISOString() : String(expiresAt || '');
+  const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  return {
+    text: `You requested a password reset for RiseQuest.\n\nReset your password: ${resetUrl.href}\n\nThis link expires at: ${expires}\n\nYou can also enter this token in the RiseQuest app or reset page: ${token}\n\nYour RiseQuest password works in the app and, if you have administrator access, Admin Studio.\n\nIf you did not request this, ignore this email.`,
+    html: `<h1>Reset your RiseQuest password</h1><p>You requested a password reset for RiseQuest.</p><p><a href="${escape(resetUrl.href)}" style="display:inline-block;padding:14px 22px;background:#21685e;color:#fff;border-radius:12px;text-decoration:none">Choose a new password</a></p><p>This link expires at ${escape(expires)}.</p><p>If the button does not open, copy this address into your browser:<br><a href="${escape(resetUrl.href)}">${escape(resetUrl.href)}</a></p><p>You can also enter this token in the RiseQuest app or reset page: <code>${escape(token)}</code></p><p>Your RiseQuest password works in the app and, if you have administrator access, Admin Studio.</p><p>If you did not request this, ignore this email.</p>`,
+  };
+}
+
 async function sendPasswordResetEmail({ to, token, expiresAt }) {
   const cfg = getSmtpConfigFromEnv();
   const transporter = getTransporter();
@@ -59,20 +70,13 @@ async function sendPasswordResetEmail({ to, token, expiresAt }) {
   }
 
   const subject = String(process.env.PASSWORD_RESET_EMAIL_SUBJECT || 'RiseQuest password reset');
-  const expires = expiresAt instanceof Date ? expiresAt.toISOString() : String(expiresAt || '');
-
-  const text =
-    `You requested a password reset for RiseQuest.\n\n` +
-    `Reset token: ${token}\n` +
-    `This token expires at: ${expires}\n\n` +
-    `Open the RiseQuest app → Login → Forgot password, then paste the token and choose a new password.\n\n` +
-    `If you didn't request this, you can ignore this email.`;
+  const content = passwordResetContent({ to, token, expiresAt });
 
   await transporter.sendMail({
     from: cfg.from,
     to,
     subject,
-    text,
+    ...content,
   });
 }
 
@@ -80,4 +84,5 @@ module.exports = {
   getSmtpConfigFromEnv,
   getTransporter,
   sendPasswordResetEmail,
+  passwordResetContent,
 };
