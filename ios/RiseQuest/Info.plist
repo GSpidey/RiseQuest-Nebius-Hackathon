@@ -42,6 +42,11 @@
 	<string>Scan payment card details if you choose the card-scanning option in checkout. Camera access is not needed for alarms.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>Choose trusted contacts when you enable emergency support.</string>
+	<!-- The linked contacts library includes optional contact-photo APIs. -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Allow the contact tools to use a photo you select for a contact.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Turn your spoken message into text when you tap Speak. Review it before sending to your companion.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Record audio when you choose a voice feature.</string>
 	<key>NSCalendarsUsageDescription</key>

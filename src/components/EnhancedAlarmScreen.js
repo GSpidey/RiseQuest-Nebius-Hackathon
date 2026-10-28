@@ -1,16 +1,9 @@
+import { AppAlert as Alert } from './AppModal';
+import {XpBar} from './ProgressCard';
+import {levelProgress,legacyTotal} from '../../backend/src/leveling';
 import { getAuthToken } from '../services/AuthTokenStorage';
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  NativeModules,
-  Linking,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, NativeModules, Linking } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { WeatherService, MotivationalService } from '../utils/AIServices';
 import { LocationService } from '../utils/LocationService';
@@ -443,6 +436,8 @@ export default function EnhancedAlarmScreen({
           </View>
         </View>
 
+        <View style={{marginHorizontal:20,marginBottom:12,padding:12,borderRadius:16,backgroundColor:'#FFFDF8'}}><XpBar progress={levelProgress(legacyTotal(userStats))} compact/></View>
+
         {!challengeLocked && alarm.snoozeEnabled !== false && wakeBuddy && <TouchableOpacity
           accessibilityRole="button" disabled={contactingBuddy}
           style={[styles.actionButton, { backgroundColor: '#E5F6F0', marginBottom: 12 }]}
@@ -660,3 +655,4 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
 });
+

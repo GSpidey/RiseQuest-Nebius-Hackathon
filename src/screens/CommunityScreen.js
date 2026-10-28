@@ -1,21 +1,9 @@
+import Modal, { AppAlert as Alert } from '../components/AppModal';
+import ProfileScreen from './ProfileScreen';
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  FlatList,
-  Modal,
-  SafeAreaView,
-  Alert,
-  ActivityIndicator,
-  RefreshControl,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { View, Image, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, FlatList, SafeAreaView, ActivityIndicator, RefreshControl } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
+import KeyboardSurface from '../components/KeyboardSurface';
 import { sunrise } from '../components/SunriseUI';
 import { communityService } from '../services/CommunityService';
 import { getBackendBaseUrl, DEFAULT_BACKEND_BASE_URL } from '../config/backendConfig';
@@ -37,8 +25,9 @@ function initialsFrom(nameOrEmail) {
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }
 
-export default function CommunityScreen({ userProfile, onClose, embedded = false, communicationLimited = false, nativeTeenSafety = false }) {
-  const [activeTab, setActiveTab] = useState('feed');
+export default function CommunityScreen({ userProfile, onClose, embedded = false, communicationLimited = false, nativeTeenSafety = false, initialTab = 'feed', entryRequest = 0 }) {
+  const [profileUserId, setProfileUserId] = useState(null);
+  const [activeTab, setActiveTab] = useState(initialTab === 'messages' ? 'messages' : 'feed');
   const [settings, setSettings] = useState(null);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [settingsError, setSettingsError] = useState(null);
@@ -89,6 +78,10 @@ export default function CommunityScreen({ userProfile, onClose, embedded = false
   const [threadBusy, setThreadBusy] = useState(false);
   const [messageText, setMessageText] = useState('');
   const [startMessageEmail, setStartMessageEmail] = useState('');
+  useEffect(() => {
+    setActiveTab(initialTab === 'messages' ? 'messages' : 'feed');
+    setSelectedThread(null);
+  }, [initialTab, entryRequest]);
 
   // Safety
   const [blocks, setBlocks] = useState([]);
@@ -669,16 +662,16 @@ export default function CommunityScreen({ userProfile, onClose, embedded = false
     </TouchableOpacity>
   );
 
-  const Avatar = ({ label }) => (
-    <View style={styles.avatar}>
-      <Text style={styles.avatarText}>{initialsFrom(label)}</Text>
-    </View>
+  const Avatar = ({ label, user }) => (
+    <TouchableOpacity accessibilityRole="button" accessibilityLabel={`View ${shortName(label)}’s profile`} disabled={!(user?.id || user?.email)} onPress={() => {setShowComments(false);setProfileUserId(user.id || user.email);}} style={styles.avatar}>
+      {user?.photoUrl ? <Image source={{uri:user.photoUrl}} style={{width:36,height:36,borderRadius:18}}/> : <Text style={styles.avatarText}>{initialsFrom(label)}</Text>}
+    </TouchableOpacity>
   );
 
   const PostCard = ({ item }) => (
     <TouchableOpacity style={styles.postCard} onLongPress={() => openPostActions(item)} activeOpacity={0.9}>
       <View style={styles.postHeader}>
-        <Avatar label={item?.author?.displayName || item?.author?.email} />
+        <Avatar label={item?.author?.displayName || item?.author?.email} user={item?.author} />
         <View style={{ flex: 1 }}>
           <Text style={styles.postAuthor}>{shortName(item?.author?.displayName || item?.author?.email)}</Text>
           <Text style={styles.postMeta}>
@@ -717,7 +710,8 @@ export default function CommunityScreen({ userProfile, onClose, embedded = false
         data={posts}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <PostCard item={item} />}
-        contentContainerStyle={{ paddingBottom: 240 }}
+        style={{ flex: 1, minHeight: 0 }}
+        contentContainerStyle={{ paddingBottom: 16 }}
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={feedRefreshing} onRefresh={refreshFeed} />}
         ListEmptyComponent={() => (
@@ -738,10 +732,7 @@ export default function CommunityScreen({ userProfile, onClose, embedded = false
         )}
       />
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
-      >
+      <View style={{ flexShrink: 0 }}>
         <View style={styles.bottomDock}>
           <Text style={styles.sectionTitle}>Share an update</Text>
           <TextInput
@@ -803,12 +794,12 @@ export default function CommunityScreen({ userProfile, onClose, embedded = false
             <Text style={styles.helperText}>Teen Safety Mode is on — public posting is disabled.</Text>
           )}
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </View>
   );
 
   const renderBuddies = () => (
-    <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+    <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ paddingBottom: 32 }}>
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Wake Buddies</Text>
         <Text style={styles.sectionSubtitle}>Add trusted friends for accountability and encouragement.</Text>
@@ -903,7 +894,7 @@ export default function CommunityScreen({ userProfile, onClose, embedded = false
   const renderGroups = () => {
     if (selectedGroup) {
       return (
-        <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+        <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ paddingBottom: 32 }}>
           <View style={styles.sectionCard}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={styles.sectionTitle}>{selectedGroup.name}</Text>
@@ -953,7 +944,7 @@ export default function CommunityScreen({ userProfile, onClose, embedded = false
     }
 
     return (
-      <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ paddingBottom: 32 }}>
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Support Circles</Text>
           <Text style={styles.sectionSubtitle}>Join topic-based circles for encouragement and tips.</Text>
@@ -1002,7 +993,8 @@ export default function CommunityScreen({ userProfile, onClose, embedded = false
 
         <Modal visible={showCreateGroup} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowCreateGroup(false)}>
           <SafeAreaView style={{ flex: 1, backgroundColor: sunrise.background }}>
-            <View style={{ padding: 16 }}>
+            <KeyboardSurface>
+            <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
               <Text style={{ color: sunrise.ink, fontSize: 20, fontWeight: '800' }}>Create Group</Text>
               <Text style={{ color: sunrise.muted, marginTop: 6 }}>Keep it supportive and specific.</Text>
 
@@ -1044,7 +1036,8 @@ export default function CommunityScreen({ userProfile, onClose, embedded = false
                   <Text style={styles.primaryButtonText}>Create</Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            </ScrollView>
+          </KeyboardSurface>
           </SafeAreaView>
         </Modal>
       </ScrollView>
@@ -1070,7 +1063,8 @@ export default function CommunityScreen({ userProfile, onClose, embedded = false
             data={threadMessages}
             keyExtractor={(m) => m.id}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 96 }}
+            style={{ flex: 1, minHeight: 0 }}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
             renderItem={({ item }) => {
               const mine = String(item?.sender?.email || '').toLowerCase() === String(userProfile?.email || '').toLowerCase();
               return (
@@ -1081,7 +1075,7 @@ export default function CommunityScreen({ userProfile, onClose, embedded = false
             }}
           />
 
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
+          <View style={{ flexShrink: 0 }}>
             <View style={styles.messageComposerDock}>
               <TextInput
                 style={[styles.input, { flex: 1, marginTop: 0 }]}
@@ -1094,13 +1088,13 @@ export default function CommunityScreen({ userProfile, onClose, embedded = false
                 <Text style={styles.primaryButtonText}>Send</Text>
               </TouchableOpacity>
             </View>
-          </KeyboardAvoidingView>
+          </View>
         </View>
       );
     }
 
     return (
-      <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ paddingBottom: 32 }}>
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Messages</Text>
           <Text style={styles.sectionSubtitle}>1:1 conversations with your buddies and trusted contacts.</Text>
@@ -1139,7 +1133,7 @@ export default function CommunityScreen({ userProfile, onClose, embedded = false
   };
 
   const renderSafety = () => (
-    <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+    <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ paddingBottom: 32 }}>
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Safety</Text>
         <Text style={styles.sectionSubtitle}>Block users and keep your space supportive.</Text>
@@ -1267,12 +1261,13 @@ export default function CommunityScreen({ userProfile, onClose, embedded = false
           <TabButton id="safety" label="Safety" />
         </View>
 
-        <View style={{ flex: 1, paddingHorizontal: 16 }}>
+        <KeyboardSurface style={{ paddingHorizontal: 16 }}>
           {renderContent()}
-        </View>
+        </KeyboardSurface>
 
         <Modal visible={showComments} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowComments(false)}>
           <SafeAreaView style={{ flex: 1, backgroundColor: sunrise.background }}>
+            <KeyboardSurface>
             <View style={{ padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ color: sunrise.ink, fontSize: 18, fontWeight: '800' }}>Comments</Text>
               <TouchableOpacity style={styles.smallButton} onPress={() => setShowComments(false)}>
@@ -1289,13 +1284,13 @@ export default function CommunityScreen({ userProfile, onClose, embedded = false
                 <ActivityIndicator color={sunrise.purple} />
               </View>
             ) : (
-              <FlatList
+              <FlatList style={{ flex: 1, minHeight: 0 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
                 data={comments}
                 keyExtractor={(c) => c.id}
                 contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
                 renderItem={({ item }) => (
                   <View style={styles.commentRow}>
-                    <Avatar label={item?.author?.displayName || item?.author?.email} />
+                    <Avatar label={item?.author?.displayName || item?.author?.email} user={item?.author} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: sunrise.ink, fontWeight: '700' }}>{shortName(item?.author?.displayName || item?.author?.email)}</Text>
                       <Text style={{ color: sunrise.ink }}>{item.content}</Text>
@@ -1317,11 +1312,13 @@ export default function CommunityScreen({ userProfile, onClose, embedded = false
                 <Text style={styles.primaryButtonText}>Send</Text>
               </TouchableOpacity>
             </View>
+          </KeyboardSurface>
           </SafeAreaView>
         </Modal>
 
         <Modal visible={showReportModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowReportModal(false)}>
           <SafeAreaView style={{ flex: 1, backgroundColor: sunrise.background }}>
+            <KeyboardSurface>
             <View style={{ padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ color: sunrise.ink, fontSize: 18, fontWeight: '800' }}>Report</Text>
               <TouchableOpacity style={styles.smallButton} onPress={() => setShowReportModal(false)}>
@@ -1329,7 +1326,7 @@ export default function CommunityScreen({ userProfile, onClose, embedded = false
               </TouchableOpacity>
             </View>
 
-            <View style={{ paddingHorizontal: 16 }}>
+            <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
               <Text style={{ color: sunrise.muted }}>Briefly describe what happened.</Text>
               <TextInput
                 style={[styles.composerInput, { marginTop: 12 }]}
@@ -1348,7 +1345,13 @@ export default function CommunityScreen({ userProfile, onClose, embedded = false
                   <Text style={styles.primaryButtonText}>Submit</Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            </ScrollView>
+          </KeyboardSurface>
+          </SafeAreaView>
+        </Modal>
+        <Modal visible={Boolean(profileUserId)} animationType={userProfile?.preferences?.reducedSensory?'none':'slide'} presentationStyle="pageSheet" onRequestClose={()=>setProfileUserId(null)}>
+          <SafeAreaView style={{flex:1,backgroundColor:'#FFF9F2'}}><View style={{padding:16,flexDirection:'row',justifyContent:'space-between',alignItems:'center'}}><Text style={{fontSize:20,fontWeight:'800',color:'#34304B'}}>Profile</Text><TouchableOpacity accessibilityRole="button" onPress={()=>setProfileUserId(null)} style={{padding:12}}><Text style={{color:'#5265B3',fontWeight:'700'}}>Done</Text></TouchableOpacity></View>
+            {profileUserId&&<ProfileScreen userProfile={userProfile} userId={profileUserId}/>}
           </SafeAreaView>
         </Modal>
       </SafeAreaView>
@@ -1420,8 +1423,12 @@ const styles = StyleSheet.create({
     padding: 12,
     color: sunrise.ink,
     minHeight: 64,
+    maxHeight: 112,
+    textAlignVertical: 'top',
   },
   composerRow: {
+    flexWrap: 'wrap',
+    gap: 8,
     marginTop: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1540,6 +1547,7 @@ const styles = StyleSheet.create({
   },
 
   bottomDock: {
+    flexShrink: 0,
     backgroundColor: sunrise.background,
     borderTopWidth: 1,
     borderTopColor: sunrise.border,
@@ -1572,3 +1580,4 @@ const styles = StyleSheet.create({
 
   commentRow: { flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: sunrise.border },
 });
+

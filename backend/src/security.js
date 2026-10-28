@@ -14,6 +14,7 @@ function authentication(prisma, secret) {
     try {
       const user = await prisma.user.findUnique({ where: { id: decoded.sub } });
       if (!user) return res.status(401).json({ error: 'Account no longer exists' });
+      if (user.createdAt && (!Number.isFinite(decoded.iat) || decoded.iat < Math.floor(new Date(user.createdAt).getTime() / 1000))) return res.status(401).json({ error: 'Please sign in again.' });
       if (user.disabledAt) return res.status(403).json({ error: 'Account disabled' });
       if (user.authProvider === 'child') {
         const linked = await prisma.childAccount.findUnique({ where: { childId: user.id }, include: { consent: true, parent: true } });
@@ -59,10 +60,8 @@ function ownQuest(prisma) {
   };
 }
 
-const POINT_PACKS = Object.freeze({
-  small: { cents: 299, points: 250 }, medium: { cents: 499, points: 550 },
-  large: { cents: 999, points: 1150 }, mega: { cents: 1999, points: 3125 },
-});
+const { LEGACY_PACKS, POINT_PACKS_V2 } = require('./economy');
+const POINT_PACKS = Object.freeze({ ...LEGACY_PACKS, ...POINT_PACKS_V2 });
 
 // Legacy clients can select a pack by its point count, but can never set its
 // price, owner, or fulfillment metadata. Existing endpoint shapes are retained.

@@ -42,6 +42,25 @@ async function loadCoachingContext(prisma, userId, { activity = false } = {}) {
     result.context.recordedActivity = { windowDays: 7, sleepEntries: sleep, completedQuests: quests,
       note: 'Only recorded activity; missing entries do not mean a missed routine or no sleep.' };
   }
+  result.context.clock={iso:new Date().toISOString(),timezone:'UTC'};
+  // Optional planning data must never prevent an ordinary conversation.
+  if(activity && result.externalAllowed && prisma.companionPreferences){
+    try{
+      const {getPreferences,snapshot}=require('../companionSupport');
+      const {clock}=require('../companionPlanning');
+      const {data:p}=await getPreferences(prisma,userId);
+      result.context.clock=clock(new Date(),p.timezone);
+      if(!profile.preferences?.dataMinimization){
+        result.context.accommodations=p.accommodations;
+        if(p.shareWorkload||p.shareMood){
+          const state=await snapshot(prisma,userId);
+          if(p.shareWorkload)result.context.workload={unfinishedCount:state.plan.unfinishedCount,remainingMinutes:state.plan.remainingMinutes,
+            plannedMinutes:state.plan.plannedMinutes,today:state.plan.today.map(q=>({title:q.title,step:q.stepTitle,minutes:q.minutes,dueAt:q.dueAt}))};
+          if(p.shareMood)result.context.recentCheckIn=state.plan.recentCheckIn;
+        }
+      }
+    }catch(error){console.error('companion_context_unavailable',{code:error.code||error.name});}
+  }
   return result;
 }
 function curatedReply(message) {

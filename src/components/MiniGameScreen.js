@@ -1,15 +1,9 @@
+import { AppAlert as Alert } from './AppModal';
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-  Animated,
-  Dimensions,
-  Vibration,
-} from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, Vibration, ScrollView } from 'react-native';
+import {sunrise, SunriseIcon} from './SunriseUI';
+import {ThemeBackdrop, MotionScreen, useReducedMotion} from '../features/customization/ThemeMotion';
+import CosmeticArtwork from './CosmeticArtwork';
 
 const { width, height } = Dimensions.get('window');
 
@@ -19,8 +13,8 @@ const triggerHaptic = (style = 'light') => {
 };
 
 const MiniGameScreen = ({
-  gameType,
-  difficulty,
+  gameType = 'math',
+  difficulty = 'medium',
   onComplete,
   onFail,
   lockExit = false,
@@ -35,6 +29,10 @@ const MiniGameScreen = ({
   const [currentChallenge, setCurrentChallenge] = useState(null);
   const [giveUpSecondsLeft, setGiveUpSecondsLeft] = useState(0);
   const timerRef = useRef(null);
+  const memoryTimer = useRef(null), holdTimer = useRef(null);
+  const [physicalCount,setPhysicalCount]=useState(0);
+  const reduced=useReducedMotion();
+  useEffect(()=>()=>{clearTimeout(memoryTimer.current);clearTimeout(holdTimer.current);},[]);
   const scoreRef = useRef(0);
   const endedRef = useRef(false);
   const answerBusyRef = useRef(false);
@@ -169,8 +167,9 @@ const MiniGameScreen = ({
     });
     
     // Hide sequence after showing it
-    setTimeout(() => {
-      setCurrentChallenge(prev => ({ ...prev, showSequence: false }));
+    clearTimeout(memoryTimer.current);
+    memoryTimer.current = setTimeout(() => {
+      setCurrentChallenge(prev => prev?.type === 'memory' ? ({ ...prev, showSequence: false }) : prev);
     }, sequenceLength * 800 + 1000);
   };
 
@@ -178,8 +177,8 @@ const MiniGameScreen = ({
     const targetCount = difficulty === 'easy' ? 5 : difficulty === 'medium' ? 8 : 12;
     const targets = Array.from({ length: targetCount }, (_, i) => ({
       id: i,
-      x: Math.random() * (width - 80),
-      y: Math.random() * (height - 200) + 100,
+      x: 5 + (i % 3) * 30 + Math.random() * 5,
+      y: 5 + Math.floor(i / 3) * 22 + Math.random() * 4,
       hit: false,
     }));
     
@@ -208,7 +207,7 @@ const MiniGameScreen = ({
   const handleAnswer = (answer) => {
     if (endedRef.current || answerBusyRef.current || gameState !== 'playing') return;
     answerBusyRef.current = true;
-    triggerHaptic('light');
+    if(!reduced)triggerHaptic('light');
 
     if (answer === currentChallenge.correctAnswer) {
       const next = scoreRef.current + 1;
@@ -224,6 +223,8 @@ const MiniGameScreen = ({
   };
 
   const handleMemorySequence = (color) => {
+    if(endedRef.current || currentChallenge.showSequence || answerBusyRef.current)return;
+    answerBusyRef.current=true;
     const newSequence = [...currentChallenge.userSequence, color];
     const isCorrect = newSequence.every((item, index) => 
       item === currentChallenge.sequence[index]
@@ -235,7 +236,7 @@ const MiniGameScreen = ({
     }
     
     if (newSequence.length === currentChallenge.sequence.length) {
-      handleGameEnd(true);
+      handleGameEnd(true, getTargetScore());
     } else {
       setCurrentChallenge(prev => ({
         ...prev,
@@ -245,7 +246,9 @@ const MiniGameScreen = ({
   };
 
   const handleTargetHit = (targetId) => {
-    triggerHaptic('medium');
+    if(endedRef.current || answerBusyRef.current || currentChallenge.targets.find(t=>t.id===targetId)?.hit)return;
+    answerBusyRef.current=true;
+    if(!reduced)triggerHaptic('medium');
     
     const newTargets = currentChallenge.targets.map(target =>
       target.id === targetId ? { ...target, hit: true } : target
@@ -260,7 +263,7 @@ const MiniGameScreen = ({
     }));
     
     if (hitCount >= currentChallenge.targetCount) {
-      handleGameEnd(true);
+      handleGameEnd(true, getTargetScore());
     }
   };
 
@@ -271,6 +274,8 @@ const MiniGameScreen = ({
   const handleGameEnd = (success, finalScore = scoreRef.current) => {
     if (endedRef.current) return;
     endedRef.current = true;
+    clearTimeout(memoryTimer.current);clearTimeout(holdTimer.current);
+    scoreRef.current=finalScore;setScore(finalScore);
     setResultSuccess(success);
     setGameState('finished');
     if (timerRef.current) {
@@ -278,10 +283,10 @@ const MiniGameScreen = ({
       timerRef.current = null;
     }
     if (success && !lockExit) {
-      triggerHaptic('medium');
+      if(!reduced)triggerHaptic('medium');
       onComplete(finalScore);
     } else if (!success && !lockExit) {
-      triggerHaptic('medium');
+      if(!reduced)triggerHaptic('medium');
       onFail();
     }
   };
@@ -292,6 +297,7 @@ const MiniGameScreen = ({
     answerBusyRef.current = false;
     setResultSuccess(false);
     setFeedback('');
+    clearTimeout(memoryTimer.current);clearTimeout(holdTimer.current);setPhysicalCount(0);
     setGameState('playing');
     setScore(0);
     setTimeLeft(30);
@@ -329,7 +335,7 @@ const MiniGameScreen = ({
 
   const header = (
     <View style={styles.challengeHeader}>
-      <Text style={styles.challengeTitle}>{lockExit ? 'Alarm Challenge' : 'Mini Game'}</Text>
+      <View style={{flexDirection:'row',alignItems:'center',gap:9,flex:1}}><View style={{padding:9,borderRadius:15,backgroundColor:sunrise.orangeTint}}><SunriseIcon name={lockExit?'alarm':'games'} size={24} color='#A55C00'/></View><Text style={styles.challengeTitle}>{lockExit ? 'Wake-up challenge' : 'Play & shine'}</Text></View>
       <TouchableOpacity
         onPress={handleGiveUpPress}
         disabled={lockExit && giveUpSecondsLeft > 0}
@@ -344,41 +350,41 @@ const MiniGameScreen = ({
 
   if (gameState === 'ready') {
     return (
-      <View style={styles.container}>
+      <View style={styles.container}><ThemeBackdrop/>
         {header}
-        <LinearGradient colors={['#667eea', '#764ba2']} style={styles.readyScreen}>
-          <Text style={styles.gameTitle}>Wake-Up Challenge!</Text>
-          <Text style={styles.gameSubtitle}>{lockExit ? 'Three correct answers unlock Stop alarm and Snooze. You can keep going to finish the round.' : `Complete the ${gameType} challenge`}</Text>
-          <Text style={styles.difficultyText}>Difficulty: {difficulty.toUpperCase()}</Text>
-          <Text style={styles.targetText}>Target Score: {getTargetScore()}</Text>
+        <ScrollView style={{flex:1}} contentContainerStyle={styles.readyScreen}>
+          <MotionScreen screenKey={gameType} style={{flex:0,marginBottom:22}}><CosmeticArtwork id={{math:'anim_sparkles',memory:'anim_petals',reaction:'anim_fireworks',physical:'sound_motivational'}[gameType]||'anim_sparkles'} size={144}/></MotionScreen>
+          <Text style={styles.gameTitle}>{{math:'Rise & solve',memory:'Memory garden',reaction:'Catch a spark',physical:'Move into morning'}[gameType]||'Wake-up challenge'}</Text>
+          <Text style={styles.gameSubtitle}>{lockExit ? (gameType==='math'?'Three correct answers unlock Stop alarm and Snooze. You can keep going to finish the round.':'Complete this round to unlock Stop alarm and Snooze.') : `Complete the ${gameType} challenge`}</Text>
+          <View style={styles.pills}><Text style={styles.pill}>{difficulty.charAt(0).toUpperCase()+difficulty.slice(1)}</Text><Text style={styles.pill}>30 seconds</Text><Text style={styles.pill}>{gameType==='math'?`${getTargetScore()} answers`:'One round'}</Text></View>
           
           <TouchableOpacity style={styles.startButton} onPress={startGame}>
             <Text style={styles.startButtonText}>Start Challenge 🚀</Text>
           </TouchableOpacity>
-        </LinearGradient>
+        </ScrollView>
       </View>
     );
   }
 
   if (gameState === 'finished') {
     return (
-      <View style={styles.container}>
+      <View style={styles.container}><ThemeBackdrop/>
         {header}
         {alarmActions}
-        <LinearGradient colors={resultSuccess ? ['#168B77', '#126B62'] : ['#7C5CFC', '#5841B5']} style={styles.finishedScreen}>
+        <ScrollView style={{flex:1}} contentContainerStyle={styles.finishedScreen}>
           <Text style={styles.resultTitle}>{resultSuccess ? 'You’re awake! 🎉' : 'Round finished'}</Text>
-          <Text style={styles.scoreText}>Final Score: {score}</Text>
+          <CosmeticArtwork id={resultSuccess?'anim_fireworks':'anim_petals'} size={135}/><Text style={styles.scoreText}>Final Score: {score}</Text>
           <Text style={styles.motivationText}>{resultSuccess ? 'Stop or snooze your alarm whenever you’re ready.' : 'No pressure. Try another round to unlock your alarm controls.'}</Text>
           {!resultSuccess && <TouchableOpacity accessibilityRole="button" style={styles.startButton} onPress={startGame}>
             <Text style={styles.startButtonText}>Try again</Text>
           </TouchableOpacity>}
-        </LinearGradient>
+        </ScrollView>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container}><ThemeBackdrop/>
       {header}
       {alarmActions}
       <View style={styles.gameHeader}>
@@ -386,9 +392,10 @@ const MiniGameScreen = ({
         <Text style={styles.scoreText}>Score: {score}/{getTargetScore()}</Text>
       </View>
 
+      <View style={styles.track} accessibilityRole='progressbar' accessibilityValue={{min:0,max:getTargetScore(),now:score}}><View style={[styles.fill,{width:`${Math.min(100,score/getTargetScore()*100)}%`}]}/></View>
       {!!feedback && <Text accessibilityLiveRegion="polite" style={styles.feedbackText}>{feedback}</Text>}
 
-      <View style={styles.gameArea}>
+      <ScrollView style={{flex:1}} contentContainerStyle={styles.gameArea} keyboardShouldPersistTaps="handled">
         {gameType === 'math' && currentChallenge && (
           <View style={styles.mathGame}>
             <Text style={styles.questionText}>{currentChallenge.question} = ?</Text>
@@ -441,6 +448,15 @@ const MiniGameScreen = ({
           </View>
         )}
 
+        {gameType === 'physical' && currentChallenge && <View style={styles.physicalGame}>
+          <SunriseIcon name='today' size={76} color={sunrise.orange}/>
+          <Text style={styles.instructionText}>{currentChallenge.action==='hold'?'Hold to greet the day':'Ten gentle taps to begin'}</Text>
+          <Text style={styles.gameSubtitle}>{currentChallenge.action==='hold'?'Keep your finger here for three seconds.':'Stay comfortable and tap at your own pace.'}</Text>
+          {currentChallenge.action==='hold'?<TouchableOpacity accessibilityRole='button' accessibilityLabel='Hold for three seconds' style={styles.startButton}
+            onPressIn={()=>{clearTimeout(holdTimer.current);holdTimer.current=setTimeout(()=>handleGameEnd(true,getTargetScore()),3000);}}
+            onPressOut={()=>clearTimeout(holdTimer.current)}><Text style={styles.startButtonText}>Hold here</Text></TouchableOpacity>:
+            <TouchableOpacity accessibilityRole='button' style={styles.startButton} onPress={()=>{if(endedRef.current)return;const n=physicalCount+1;setPhysicalCount(n);if(n>=10)handleGameEnd(true,getTargetScore());}}><Text style={styles.startButtonText}>{physicalCount} / 10 · Tap</Text></TouchableOpacity>}
+        </View>}
         {gameType === 'reaction' && currentChallenge && (
           <View style={styles.reactionGame}>
             <Text style={styles.instructionText}>Tap all the targets!</Text>
@@ -452,8 +468,8 @@ const MiniGameScreen = ({
                   style={[
                     styles.target,
                     {
-                      left: target.x,
-                      top: target.y,
+                      left: `${target.x}%`,
+                      top: `${target.y}%`,
                       opacity: target.hit ? 0.3 : 1,
                     },
                   ]}
@@ -466,13 +482,16 @@ const MiniGameScreen = ({
             </View>
           </View>
         )}
-      </View>
+      </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  alarmActions: { padding: 12, gap: 8, backgroundColor: '#FFF7ED' },
+  track:{height:8,borderRadius:4,backgroundColor:'#EAE1D8',marginHorizontal:20,overflow:'hidden'},fill:{height:8,borderRadius:4,backgroundColor:sunrise.teal},
+  pills:{flexDirection:'row',flexWrap:'wrap',justifyContent:'center',gap:8,marginBottom:24},pill:{padding:10,borderRadius:14,backgroundColor:'#FFFFFF',color:sunrise.muted,fontWeight:'700'},
+  physicalGame:{flex:1,alignItems:'center',justifyContent:'center',gap:18},
+  alarmActions: { padding: 12, margin:12, borderRadius:24, gap: 8, backgroundColor: '#E6F6EA' },
   unlockedText: { color: '#334155', textAlign: 'center', fontSize: 14 },
   stopAlarmButton: { minHeight: 48, padding: 12, borderRadius: 14, backgroundColor: '#A84400', alignItems: 'center' },
   snoozeAlarmButton: { minHeight: 48, padding: 12, borderRadius: 14, backgroundColor: '#5841B5', alignItems: 'center' },
@@ -480,7 +499,7 @@ const styles = StyleSheet.create({
   feedbackText: { color: '#334155', paddingHorizontal: 16, paddingTop: 8, textAlign: 'center' },
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: sunrise.background,
   },
   challengeHeader: {
     paddingHorizontal: 16,
@@ -496,65 +515,65 @@ const styles = StyleSheet.create({
   challengeTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#111827',
+    color: sunrise.ink,
   },
   giveUpButton: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
-    backgroundColor: '#111827',
+    backgroundColor: sunrise.purpleTint,
   },
   giveUpButtonDisabled: {
-    backgroundColor: '#94a3b8',
+    backgroundColor: '#E9E2D9',
   },
   giveUpText: {
-    color: '#fff',
+    color: sunrise.ink,
     fontWeight: '800',
     fontSize: 12,
   },
   giveUpTextDisabled: {
-    color: '#f8fafc',
+    color: sunrise.muted,
   },
   readyScreen: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   finishedScreen: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   gameTitle: {
-    fontSize: 32,
+    fontSize: 27,
     fontWeight: 'bold',
-    color: 'white',
+    color: sunrise.ink,
     marginBottom: 10,
     textAlign: 'center',
   },
   gameSubtitle: {
     fontSize: 18,
-    color: 'white',
+    color: sunrise.ink,
     opacity: 0.9,
     marginBottom: 20,
     textAlign: 'center',
   },
   difficultyText: {
     fontSize: 16,
-    color: 'white',
+    color: sunrise.ink,
     opacity: 0.8,
     marginBottom: 10,
   },
   targetText: {
     fontSize: 16,
-    color: 'white',
+    color: sunrise.ink,
     opacity: 0.8,
     marginBottom: 30,
   },
   startButton: {
-    backgroundColor: 'white',
+    backgroundColor: sunrise.orange,
     borderRadius: 25,
     paddingHorizontal: 40,
     paddingVertical: 15,
@@ -562,7 +581,7 @@ const styles = StyleSheet.create({
   startButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#667eea',
+    color: sunrise.ink,
   },
   gameHeader: {
     flexDirection: 'row',
@@ -581,10 +600,11 @@ const styles = StyleSheet.create({
   scoreText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#667eea',
+    color: sunrise.ink,
   },
   gameArea: {
-    flex: 1,
+    flexGrow: 1,
+    paddingBottom: 48,
     padding: 20,
   },
   mathGame: {
@@ -605,7 +625,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   optionButton: {
-    backgroundColor: '#667eea',
+    borderWidth:2,borderColor:'#F5D9B5',
+    backgroundColor: '#FFF0DB',
     borderRadius: 15,
     padding: 20,
     margin: 10,
@@ -615,7 +636,7 @@ const styles = StyleSheet.create({
   optionText: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: 'white',
+    color: sunrise.ink,
   },
   memoryGame: {
     flex: 1,
@@ -630,6 +651,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   sequenceDisplay: {
+    flexWrap:'wrap',
     flexDirection: 'row',
     justifyContent: 'center',
     marginBottom: 20,
@@ -659,6 +681,7 @@ const styles = StyleSheet.create({
     fontSize: 30,
   },
   userSequence: {
+    flexWrap:'wrap',
     flexDirection: 'row',
     justifyContent: 'center',
   },
@@ -672,12 +695,13 @@ const styles = StyleSheet.create({
   progressText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#667eea',
+    color: sunrise.ink,
     textAlign: 'center',
     marginBottom: 20,
   },
   targetArea: {
-    flex: 1,
+    height: 400,
+    borderRadius:26, backgroundColor:'#F0ECFF', overflow:'hidden',
     position: 'relative',
   },
   target: {
@@ -700,13 +724,13 @@ const styles = StyleSheet.create({
   resultTitle: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: 'white',
+    color: sunrise.ink,
     marginBottom: 20,
     textAlign: 'center',
   },
   motivationText: {
     fontSize: 18,
-    color: 'white',
+    color: sunrise.ink,
     opacity: 0.9,
     textAlign: 'center',
     marginTop: 20,
@@ -714,3 +738,4 @@ const styles = StyleSheet.create({
 });
 
 export default MiniGameScreen;
+

@@ -1,6 +1,7 @@
+import { AppAlert as Alert } from '../services/dialogQueue';
 import Contacts from 'react-native-contacts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert, Linking } from 'react-native';
+import { Linking } from 'react-native';
 
 export const EmergencyService = {
   async getContacts() {
@@ -269,3 +270,4 @@ export const EmergencyService = {
     };
   },
 };
+

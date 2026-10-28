@@ -1,14 +1,6 @@
+import { AppAlert as Alert } from '../components/AppModal';
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  Alert,
-  Dimensions,
-  Switch,
-} from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Dimensions, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { UserProfileService } from '../models/RiseQuestModels';
@@ -38,6 +30,8 @@ const OnboardingScreen = ({ onComplete, prefillProfile }) => {
       captionsEnabled: false,
       dyslexiaFriendly: false,
       notificationStyle: 'gentle',
+      untimedChallenges: true,
+      focusAreas: [],
       communityOptIn: false,
       analyticsOptIn: false,
       ...prefillProfile?.preferences,
@@ -236,6 +230,10 @@ const OnboardingScreen = ({ onComplete, prefillProfile }) => {
       </Text>
       
       <View style={styles.accessibilityList}>
+        <View style={styles.accessibilityItem}><Text style={styles.accessibilityLabel}>Untimed challenges</Text><Switch value={userData.preferences.untimedChallenges !== false} onValueChange={value => updateUserData({preferences:{...userData.preferences,untimedChallenges:value}})}/></View>
+        <Text style={styles.description}>Tap to select the skills you would like to practice. Choose as many as you like.</Text>
+        {['memory','attention','reasoning','language','auditory'].map(area => <TouchableOpacity key={area} style={[styles.accessibilityItem, {borderWidth:1,borderColor:(userData.preferences.focusAreas||[]).includes(area)?'#FF7A00':'#EEE4DB',borderRadius:14,padding:14,marginBottom:8,backgroundColor:(userData.preferences.focusAreas||[]).includes(area)?'#FFF0DB':'#FFFFFF'}]} accessibilityRole="checkbox" accessibilityLabel={area} accessibilityState={{checked:(userData.preferences.focusAreas||[]).includes(area)}} onPress={()=>{const selected=userData.preferences.focusAreas||[];updateUserData({preferences:{...userData.preferences,focusAreas:selected.includes(area)?selected.filter(v=>v!==area):[...selected,area]}});}}><Text style={[styles.accessibilityLabel,{textTransform:'capitalize'}]}>{area}</Text><View style={{width:26,height:26,borderRadius:7,borderWidth:2,borderColor:(userData.preferences.focusAreas||[]).includes(area)?'#FF7A00':'#A8A0AE',backgroundColor:(userData.preferences.focusAreas||[]).includes(area)?'#FF7A00':'#FFFFFF',alignItems:'center',justifyContent:'center'}}><Text style={{fontWeight:'900',color:'#252438'}}>{(userData.preferences.focusAreas||[]).includes(area)?'✓':''}</Text></View></TouchableOpacity>)}
+
         <View style={styles.accessibilityItem}>
           <Text style={styles.accessibilityLabel}>Reduced sensory mode</Text>
           <Switch
@@ -875,3 +873,4 @@ const styles = StyleSheet.create({
 });
 
 export default OnboardingScreen;
+

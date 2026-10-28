@@ -1,3 +1,4 @@
+import { AppAlert as Alert } from './AppModal';
 /**
  * Quest Card Component - Individual Quest Display
  * Shows quest progress, subtasks, and actions
@@ -5,14 +6,7 @@
 
 import { sunrise } from './SunriseUI';
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  Animated,
-} from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 
 const QuestCard = ({ 
   quest, 
@@ -603,3 +597,4 @@ const styles = StyleSheet.create({
 });
 
 export default QuestCard;
+

@@ -53,10 +53,15 @@ async function verifyPurchase(body, accountId) {
   const product = storeProduct(body.productId);
   const segment = product.kind === 'subscription' ? 'subscriptionsv2' : 'productsv2';
   const payload = await playApi(`purchases/${segment}/tokens/${encodeURIComponent(body.proof)}`);
-  return googlePurchase(payload, body.productId, accountId, hash(body.proof));
+  const purchase = googlePurchase(payload, body.productId, accountId, hash(body.proof));
+  if (purchase.kind === 'subscription' && purchase.grantOrder) {
+    const order = await playApi(`orders/${encodeURIComponent(purchase.grantOrder)}`);
+    Object.assign(purchase, require('./economy').googleOrderAllowance(order, {orderId:purchase.grantOrder,token:body.proof,productId:body.productId,plan:product.plan}));
+  }
+  return purchase;
 }
 async function applyPurchase(prisma, userId, purchase, encryptedToken = undefined, eventId = null) {
-  const { points, ...data } = purchase;
+  const { points, grant, grantOrder, revokedGrantPeriod, ...data } = purchase;
   return prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
     if (eventId && await tx.storeNotification.findUnique({ where: { id: eventId } })) return { duplicate: true };
@@ -93,10 +98,16 @@ async function applyPurchase(prisma, userId, purchase, encryptedToken = undefine
       else await tx.storePurchase.updateMany({ where: { userId, store: 'apple', originalId: data.originalId,
         id: { not: data.id }, status: 'active', purchasedAt: { lte: data.purchasedAt } }, data: { status: 'expired' } });
     }
+    if (data.kind === 'subscription' && (data.status === 'revoked' || revokedGrantPeriod)) {
+      const period = revokedGrantPeriod || (data.store === 'apple' ? data.id.slice(6) : grantOrder);
+      if(period) await require('./economy').revokeSubscriptionGrant(tx, userId, data.store, period);
+    }
+    const allowance = data.status === 'active' && data.kind === 'subscription'
+      ? await require('./economy').grantSubscription(tx, userId, grant || {}) : 0;
     await tx.storePurchase.upsert({ where: { id: data.id }, create: { ...data, userId, token: encryptedToken, pointsGranted, pointsRecovered },
       update: { ...data, ...(encryptedToken ? { token: encryptedToken } : {}), pointsGranted, pointsRecovered } });
     if (eventId) await tx.storeNotification.create({ data: { id: eventId } });
-    return { status: data.status, pointsGranted, pointsRecovered };
+    return { status: data.status, pointsGranted, pointsRecovered, allowance };
   });
 }
 async function entitlements(prisma, userId) {
@@ -178,7 +189,18 @@ function registerStoreBilling(app, { prisma, requireAuth, secret }) {
     const previous = await prisma.storePurchase.findUnique({ where: { id: `google:${hash(proof)}` } });
     if (!previous?.userId) return res.json({ received: true, noAccount: true });
     const owner = await account(previous.userId), purchase = await verifyPurchase({ store: 'google', productId: previous.productId, proof }, owner.id);
-    if (payload.voidedPurchaseNotification) purchase.status = 'revoked';
+    if (payload.voidedPurchaseNotification) {
+      if (purchase.kind === 'points') purchase.status = 'revoked';
+      else {
+        const orderId=payload.voidedPurchaseNotification.orderId;
+        if (!orderId) throw fail(503,'Refund verification needs an order reference.');
+        const order=await playApi(`orders/${encodeURIComponent(orderId)}`);
+        const refund=require('./economy').googleOrderAllowance(order,{orderId,token:proof,productId:previous.productId});
+        if (!refund.revokedGrantPeriod) throw fail(503,'Refund verification will be retried.');
+        purchase.revokedGrantPeriod=refund.revokedGrantPeriod;
+        // Refunding an older period must not revoke a newer active renewal.
+      }
+    }
     allowedEnvironment(purchase, previous.userId);
     await applyPurchase(prisma, previous.userId, purchase, undefined, `google:${message.messageId}`);
     res.json({ received: true });

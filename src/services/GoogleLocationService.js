@@ -1,114 +1,38 @@
+import {fetchWithTimeout} from './fetchWithTimeout';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Geolocation from 'react-native-geolocation-service';
-import { PermissionsAndroid, Platform } from 'react-native';
+import {deviceLocation} from './deviceLocation';
 import { getBackendBaseUrl } from '../config/backendConfig';
 
 export const GoogleLocationService = {
-  // Initialize location services
   async initialize() {
-    try {
-      if (Platform.OS === 'android') {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
-        );
-        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-          console.warn('Location permission not granted');
-          return false;
-        }
-      } else {
-        const status = await Geolocation.requestAuthorization('whenInUse');
-        if (status !== 'granted') {
-          console.warn('Location permission not granted');
-          return false;
-        }
-      }
-
-      console.log('✅ Google Location Service initialized');
-      return true;
-    } catch (error) {
-      console.error('Error initializing location service:', error);
-      return false;
-    }
+    try { return await deviceLocation.authorize(true); } catch (_) { return false; }
   },
 
-  // Get current location with Google geocoding
-  async getCurrentLocation() {
+  async getCurrentLocation({requestPermission = false,onCoordinates} = {}) {
     try {
-      const location = await new Promise((resolve, reject) => {
-        Geolocation.getCurrentPosition(
-          resolve,
-          reject,
-          {
-            enableHighAccuracy: true,
-            timeout: 15000,
-            maximumAge: 10000,
-          }
-        );
-      });
-
-      const { latitude, longitude, accuracy } = location.coords;
+      const location = await deviceLocation.current({requestPermission});
+      const {latitude, longitude, accuracy} = location.coords;
+      onCoordinates?.({latitude,longitude,accuracy,timestamp:location.timestamp||Date.now()});
       const address = await this.reverseGeocode(latitude, longitude);
-
-      return {
-        latitude,
-        longitude,
-        address,
-        timestamp: Date.now(),
-        accuracy,
-        source: 'backend_geocoding',
-      };
+      return {latitude, longitude, accuracy, address, timestamp: location.timestamp||Date.now(), source: address ? 'device_with_place' : 'device'};
     } catch (error) {
-      console.error('Error getting current location:', error);
-      return { error: 'Could not get location' };
+      console.warn('Location fetch failed', error);
+      return {error: error?.message || 'Location unavailable. Check permission and try again.'};
     }
   },
 
-  // Watch live location updates (GPS)
-  // Returns watchId which must be cleared via clearWatchLocation.
-  watchLocation(onPosition, onError, options = {}) {
-    try {
-      return Geolocation.watchPosition(
-        onPosition,
-        onError,
-        {
-          enableHighAccuracy: true,
-          distanceFilter: 25,
-          interval: 30000,
-          fastestInterval: 15000,
-          showLocationDialog: false,
-          forceRequestLocation: true,
-          ...options,
-        }
-      );
-    } catch (error) {
-      console.error('Error starting location watch:', error);
-      return null;
-    }
+  async watchLocation(onPosition, onError, options = {}) {
+    try { return await deviceLocation.watch(onPosition, onError, options); }
+    catch (error) {onError?.(error); return null;}
   },
-
-  clearWatchLocation(watchId) {
-    try {
-      if (watchId != null) {
-        Geolocation.clearWatch(watchId);
-      }
-    } catch (_) {
-      // ignore
-    }
-  },
-
-  stopObserving() {
-    try {
-      Geolocation.stopObserving();
-    } catch (_) {
-      // ignore
-    }
-  },
+  clearWatchLocation(id) {try {deviceLocation.clearWatch(id);} catch (_) {}},
+  stopObserving() {try {deviceLocation.stopObserving();} catch (_) {}},
 
   // Google Geocoding API - Convert coordinates to address
   async reverseGeocode(latitude, longitude) {
     try {
       const baseUrl = await getBackendBaseUrl();
-      const response = await fetch(`${baseUrl}/api/geo/reverse?lat=${latitude}&lon=${longitude}`);
+      const response = await fetchWithTimeout(`${baseUrl}/api/geo/reverse?lat=${latitude}&lon=${longitude}`,{},10000);
       const data = await response.json();
       if (data?.error) return null;
 
@@ -119,6 +43,7 @@ export const GoogleLocationService = {
         country: data.country,
         postal_code: data.postalCode,
         place_id: data.placeId,
+        attribution: data.attribution,
       };
     } catch (error) {
       console.error('Google Geocoding API error:', error);
@@ -340,3 +265,4 @@ export const GoogleLocationService = {
     }
   },
 };
+

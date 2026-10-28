@@ -1,17 +1,10 @@
+import ModalHeading from './ModalHeading';
+import Modal, { AppAlert as Alert } from './AppModal';
 import { getAuthToken } from '../services/AuthTokenStorage';
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Modal,
-  Switch,
-  Dimensions,
-  Alert,
-  TextInput,
-} from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch, Dimensions, TextInput, NativeModules, Platform } from 'react-native';
+import DevicePicker from './DevicePicker';
+import PushNotification from 'react-native-push-notification';
 import LinearGradient from 'react-native-linear-gradient';
 import { LineChart, ProgressChart } from 'react-native-chart-kit';
 import { accelerometer, setUpdateIntervalForType, SensorTypes } from 'react-native-sensors';
@@ -27,7 +20,7 @@ const { width } = Dimensions.get('window');
  * Comprehensive Sleep & Health Integration
  * Sleep tracking, wearable integration, and health metrics
  */
-export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
+export const SleepHealthIntegration = ({ userProfile, onUpdateProfile, onNavigate }) => {
   const accountCache = createAccountDataCache(AsyncStorage, userProfile);
   const [sleepData, setSleepData] = useState([]);
   const [healthMetrics, setHealthMetrics] = useState({
@@ -36,6 +29,10 @@ export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
   });
   const [connectedDevices, setConnectedDevices] = useState([]);
   const [showDeviceModal, setShowDeviceModal] = useState(false);
+  const [selectedDevice,setSelectedDevice]=useState(null);
+  const [settingError,setSettingError]=useState('');
+  const [savingSetting,setSavingSetting]=useState(false);
+  const settingLock=useRef(false);
   const [currentTab, setCurrentTab] = useState('overview');
   const [showAddSleepModal, setShowAddSleepModal] = useState(false);
   const [savingSleep, setSavingSleep] = useState(false);
@@ -58,6 +55,7 @@ export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
   });
 
   const supportedDevices = [
+    { id: 'health_connect', name: 'Health Connect', icon: '🌙', status: 'available' },
     { id: 'apple_watch', name: 'Apple Watch', icon: '⌚', status: 'available' },
     { id: 'fitbit', name: 'Fitbit', icon: '📱', status: 'available' },
     { id: 'garmin', name: 'Garmin', icon: '⌚', status: 'available' },
@@ -101,7 +99,7 @@ export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
       sleepDuration: typeof e?.durationMinutes === 'number'
         ? Math.round((e.durationMinutes / 60) * 10) / 10
         : Number(e?.sleepDuration || 0),
-      sleepQuality: typeof e?.sleepQuality === 'number' ? e.sleepQuality : Number(e?.sleepQuality || 0),
+      sleepQuality: String(e?.notes||'').includes('Sleep quality was not measured.') ? null : typeof e?.sleepQuality === 'number' ? e.sleepQuality : Number(e?.sleepQuality || 0),
       notes: e?.notes != null ? String(e.notes) : '',
       source: e?.source ? String(e.source) : 'manual',
     };
@@ -236,16 +234,10 @@ export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
   };
 
   const loadConnectedDevices = async () => {
-    try {
-      const devices = await AsyncStorage.getItem('connectedDevices');
-      if (devices) {
-        setConnectedDevices(JSON.parse(devices));
-      } else {
-        setConnectedDevices(['phone_sensors']); // Default phone sensors
-      }
-    } catch (error) {
-      console.error('Error loading connected devices:', error);
-    }
+    // Old versions marked watches connected without talking to a device.
+    // Only a completed import is retained, and only for this account.
+    const imported=await accountCache.read('healthImportedSource',null);
+    setConnectedDevices(imported ? ['health_connect'] : []);
   };
 
   const initializePhoneSensors = () => probePhoneSensor(
@@ -259,9 +251,8 @@ export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
     const avgDuration = recentSleep.length
       ? recentSleep.reduce((sum, day) => sum + (Number(day.sleepDuration) || 0), 0) / recentSleep.length
       : 0;
-    const avgQuality = recentSleep.length
-      ? recentSleep.reduce((sum, day) => sum + (Number(day.sleepQuality) || 0), 0) / recentSleep.length
-      : 0;
+    const qualityRows=recentSleep.filter(d=>d.sleepQuality!==null);
+    const avgQuality=qualityRows.length?qualityRows.reduce((sum,d)=>sum+Number(d.sleepQuality||0),0)/qualityRows.length:null;
 
     return (
       <ScrollView style={styles.tabContent}>
@@ -273,7 +264,7 @@ export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
           </View>
           
           <View style={styles.metricCard}>
-            <Text style={styles.metricValue}>{recentSleep.length ? `${avgQuality.toFixed(0)}%` : '—'}</Text>
+            <Text style={styles.metricValue}>{avgQuality!==null ? `${avgQuality.toFixed(0)}%` : 'Not measured'}</Text>
             <Text style={styles.metricLabel}>Sleep Quality</Text>
             <Text style={styles.metricSubtext}>{recentSleep.length ? 'Self-reported rating' : 'No logs yet'}</Text>
           </View>
@@ -322,8 +313,8 @@ export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
               height={200}
               chartConfig={{
                 backgroundColor: 'transparent',
-                backgroundGradientFrom: 'rgba(255,255,255,0.1)',
-                backgroundGradientTo: 'rgba(255,255,255,0.1)',
+                backgroundGradientFrom: '#FFFFFF',
+                backgroundGradientTo: '#FFFFFF',
                 decimalPlaces: 1,
                 color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
                 labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
@@ -445,15 +436,16 @@ export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
   const DevicesTab = () => (
     <ScrollView style={styles.tabContent}>
       <View style={styles.devicesSection}>
-        <Text style={styles.sectionTitle}>📱 Connected Devices</Text>
+        <Text style={styles.sectionTitle}>⌚ Devices & sleep sources</Text>
+        <Text style={{color:"#63576E",marginBottom:16}}>Choose a device to search, pair or import sleep.</Text>
         
         {supportedDevices.map(device => (
-          <View key={device.id} style={styles.deviceCard}>
+          <TouchableOpacity accessibilityRole="button" key={device.id} style={[styles.deviceCard,{backgroundColor:"#F8F3FF",borderColor:"#E3D8F4",borderWidth:1}]} onPress={()=>{setSelectedDevice(device);setShowDeviceModal(true);}}>
             <Text style={styles.deviceIcon}>{device.icon}</Text>
             <View style={styles.deviceInfo}>
               <Text style={styles.deviceName}>{device.name}</Text>
               <Text style={styles.deviceStatus}>
-                {connectedDevices.includes(device.id) ? 'Connected' : 'Not Connected'}
+                {connectedDevices.includes(device.id) ? 'Sleep previously imported · tap to refresh' : device.id==='phone_sensors'?'Movement-assisted wake settings':'Find & choose a connection'}
               </Text>
 
               {device.id === 'google_fit' && (
@@ -467,13 +459,8 @@ export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
                 </>
               )}
             </View>
-            <Switch
-              value={connectedDevices.includes(device.id)}
-              onValueChange={(value) => toggleDevice(device.id, value)}
-              trackColor={{ false: '#767577', true: '#81b0ff' }}
-              thumbColor={connectedDevices.includes(device.id) ? '#f5dd4b' : '#f4f3f4'}
-            />
-          </View>
+            <Text style={{fontSize:26,color:'#7651D0'}}>›</Text>
+          </TouchableOpacity>
         ))}
       </View>
 
@@ -503,17 +490,20 @@ export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
       )}
 
       <View style={styles.devicesSection}>
-        <Text style={styles.sectionTitle}>⚙️ Sensor Settings</Text>
+        <Text style={styles.sectionTitle}>✨ Sensor Settings</Text>
+        {settingError?<Text accessibilityLiveRegion="polite" style={{color:"#963F50",padding:12}}>{settingError}</Text>:null}
+        {savingSetting?<Text style={{padding:12}}>Saving your preference…</Text>:null}
         
         <View style={styles.settingCard}>
           <View style={styles.settingInfo}>
             <Text style={styles.settingName}>Movement Tracking</Text>
             <Text style={styles.settingDescription}>
-              Use phone sensors to track sleep movement
+              Allow optional movement monitoring during your smart wake window
             </Text>
           </View>
           <Switch
-            value={userProfile?.sleepSettings?.movementTracking}
+            disabled={savingSetting}
+            value={Boolean(userProfile?.sleepSettings?.movementTracking)}
             onValueChange={(value) => updateSleepSetting('movementTracking', value)}
           />
         </View>
@@ -522,11 +512,12 @@ export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
           <View style={styles.settingInfo}>
             <Text style={styles.settingName}>Smart Wake-Up</Text>
             <Text style={styles.settingDescription}>
-              Wake up during lighter sleep phases
+              Open a movement-assisted wake window before your fixed alarm
             </Text>
           </View>
           <Switch
-            value={userProfile?.sleepSettings?.smartWakeUp}
+            disabled={savingSetting}
+            value={Boolean(userProfile?.sleepSettings?.smartWakeUp)}
             onValueChange={(value) => updateSleepSetting('smartWakeUp', value)}
           />
         </View>
@@ -535,11 +526,12 @@ export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
           <View style={styles.settingInfo}>
             <Text style={styles.settingName}>Sleep Reminders</Text>
             <Text style={styles.settingDescription}>
-              Reminders to maintain sleep schedule
+              Daily bedtime reminder at 10:00 p.m. on this device
             </Text>
           </View>
           <Switch
-            value={userProfile?.sleepSettings?.reminders}
+            disabled={savingSetting}
+            value={Boolean(userProfile?.sleepSettings?.reminders)}
             onValueChange={(value) => updateSleepSetting('reminders', value)}
           />
         </View>
@@ -616,62 +608,25 @@ export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
     return Math.max(0, Math.min(100, 100 - (standardDeviation * 10)));
   };
 
-  const toggleDevice = async (deviceId, enabled) => {
+  const updateSleepSetting = async (setting, value) => {
+    if(settingLock.current)return;
+    settingLock.current=true;setSavingSetting(true);setSettingError('');
     try {
-      let newConnectedDevices;
-      if (enabled) {
-        if (deviceId === 'google_fit') {
-          try {
-            setGoogleFitDebug((p) => ({ ...p, lastResult: 'Syncing…' }));
-            const result = await GoogleFitService.connectAndSyncSleep({ days: 30 });
-            if (!result?.ok) {
-              const msg = result?.message ? String(result.message) : 'Google Fit sync failed';
-              setGoogleFitDebug((p) => ({ ...p, lastResult: msg }));
-              await AsyncStorage.setItem('risequest_googlefit_last_result', msg).catch(() => {});
-              return;
-            }
-
-            const msg = String(result?.message || `Synced ${Number(result?.synced || 0)} nights.`);
-            const stamp = new Date().toISOString();
-            setGoogleFitDebug({ lastSyncAt: stamp, lastResult: msg });
-            await AsyncStorage.setItem('risequest_googlefit_last_sync', stamp).catch(() => {});
-            await AsyncStorage.setItem('risequest_googlefit_last_result', msg).catch(() => {});
-            await loadSleepData();
-          } catch (e) {
-            const msg = e?.message ? String(e.message) : 'Failed to connect Google Fit';
-            setGoogleFitDebug((p) => ({ ...p, lastResult: msg }));
-            await AsyncStorage.setItem('risequest_googlefit_last_result', msg).catch(() => {});
-            Alert.alert('Google Fit', msg);
-            return;
-          }
+      if(typeof onUpdateProfile!=='function')throw new Error('Reopen Sleep & recovery to save your settings.');
+      if(value && (setting==='movementTracking'||setting==='smartWakeUp') && Platform.OS!=='android')throw new Error('Movement-assisted wake windows are available on Android. Your fixed alarm remains available.');
+      await onUpdateProfile({...userProfile,sleepSettings:{...userProfile?.sleepSettings,[setting]:Boolean(value)}});
+      if(setting==='reminders'){
+        PushNotification.cancelLocalNotification('7314');
+        if(value){
+          PushNotification.createChannel({channelId:'risequest-sleep',channelName:'Bedtime reminders',importance:3},()=>{});
+          const date=new Date();date.setHours(22,0,0,0);if(date<=new Date())date.setDate(date.getDate()+1);
+          PushNotification.localNotificationSchedule({id:'7314',data:{kind:'sleep-reminder'},userInfo:{kind:'sleep-reminder'},channelId:'risequest-sleep',title:'Time to wind down 🌙',message:'A gentle moment to prepare for rest.',date,repeatType:'day',allowWhileIdle:false});
+          setSettingError('Bedtime reminder saved for 10:00 p.m. Make sure notifications are allowed in phone settings.');
         }
-        newConnectedDevices = [...connectedDevices, deviceId];
-        // In production, this would initiate device connection
-        Alert.alert(
-          'Device Connection',
-          `Connecting to ${supportedDevices.find(d => d.id === deviceId)?.name}...`,
-          [{ text: 'OK' }]
-        );
-      } else {
-        newConnectedDevices = connectedDevices.filter(id => id !== deviceId);
-      }
-      
-      setConnectedDevices(newConnectedDevices);
-      await AsyncStorage.setItem('connectedDevices', JSON.stringify(newConnectedDevices));
-    } catch (error) {
-      console.error('Error toggling device:', error);
-    }
-  };
-
-  const updateSleepSetting = (setting, value) => {
-    const updatedProfile = {
-      ...userProfile,
-      sleepSettings: {
-        ...userProfile.sleepSettings,
-        [setting]: value,
-      },
-    };
-    onUpdateProfile(updatedProfile);
+      }else if(value){onNavigate?.('smart-wake');}
+      else if(NativeModules.RiseQuestAlarmAudio?.stopSmartWake){await NativeModules.RiseQuestAlarmAudio.stopSmartWake();}
+    }catch(error){setSettingError(error?.message||'Your setting could not be saved. Please try again.');}
+    finally{settingLock.current=false;setSavingSetting(false);}
   };
 
   const syncHealthData = async () => {
@@ -685,7 +640,7 @@ export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
+      <LinearGradient colors={['#FFF9F2', '#FFF0DB']} style={styles.header}>
         <Text style={styles.headerTitle}>😴 Sleep & Health</Text>
         <Text style={styles.headerSubtitle}>Track your sleep patterns and health metrics</Text>
       </LinearGradient>
@@ -723,10 +678,11 @@ export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
       {currentTab === 'analytics' && <AnalyticsTab />}
       {currentTab === 'devices' && <DevicesTab />}
 
-      <Modal visible={showAddSleepModal} animationType="slide" presentationStyle="pageSheet">
+      <DevicePicker visible={showDeviceModal} device={selectedDevice} onClose={()=>setShowDeviceModal(false)} onPhoneSettings={()=>setCurrentTab('devices')} onImported={async source=>{await accountCache.write('healthImportedSource',source);await loadConnectedDevices();await loadSleepData();}}/>
+      <Modal visible={showAddSleepModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowAddSleepModal(false)}>
         <View style={styles.modalContainer}>
-          <LinearGradient colors={['#667eea', '#764ba2']} style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>➕ Add Sleep Log</Text>
+          <LinearGradient colors={['#FFF9F2', '#FFF0DB']} style={styles.modalHeader}>
+            <View style={{flex:1,paddingTop:8}}><ModalHeading compact title='➕ Add Sleep Log' icon="star"/></View>
             <TouchableOpacity onPress={() => setShowAddSleepModal(false)}>
               <Text style={styles.modalClose}>✕</Text>
             </TouchableOpacity>
@@ -739,7 +695,7 @@ export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
                 value={String(newSleep.date || '')}
                 onChangeText={(t) => setNewSleep((p) => ({ ...p, date: t }))}
                 placeholder="2026-02-22"
-                placeholderTextColor="rgba(255,255,255,0.65)"
+                placeholderTextColor="#71697B"
                 style={styles.modalInput}
                 autoCapitalize="none"
               />
@@ -751,7 +707,7 @@ export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
                 value={String(newSleep.bedtime || '')}
                 onChangeText={(t) => setNewSleep((p) => ({ ...p, bedtime: t }))}
                 placeholder="22:30"
-                placeholderTextColor="rgba(255,255,255,0.65)"
+                placeholderTextColor="#71697B"
                 style={styles.modalInput}
                 autoCapitalize="none"
               />
@@ -763,7 +719,7 @@ export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
                 value={String(newSleep.wakeTime || '')}
                 onChangeText={(t) => setNewSleep((p) => ({ ...p, wakeTime: t }))}
                 placeholder="07:00"
-                placeholderTextColor="rgba(255,255,255,0.65)"
+                placeholderTextColor="#71697B"
                 style={styles.modalInput}
                 autoCapitalize="none"
               />
@@ -775,7 +731,7 @@ export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
                 value={String(newSleep.sleepQuality || '')}
                 onChangeText={(t) => setNewSleep((p) => ({ ...p, sleepQuality: t.replace(/[^0-9]/g, '').slice(0, 3) }))}
                 placeholder="80"
-                placeholderTextColor="rgba(255,255,255,0.65)"
+                placeholderTextColor="#71697B"
                 style={styles.modalInput}
                 keyboardType="number-pad"
               />
@@ -787,7 +743,7 @@ export const SleepHealthIntegration = ({ userProfile, onUpdateProfile }) => {
                 value={String(newSleep.notes || '')}
                 onChangeText={(t) => setNewSleep((p) => ({ ...p, notes: t }))}
                 placeholder="Caffeine late, stress, workout, etc."
-                placeholderTextColor="rgba(255,255,255,0.65)"
+                placeholderTextColor="#71697B"
                 style={[styles.modalInput, { minHeight: 70 }]}
                 multiline
               />
@@ -819,11 +775,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: 'white',
+    color: '#252438',
   },
   headerSubtitle: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.8)',
+    color: '#252438',
     marginTop: 4,
   },
   tabSelector: {
@@ -839,33 +795,34 @@ const styles = StyleSheet.create({
   },
   activeTab: {
     borderBottomWidth: 2,
-    borderBottomColor: '#667eea',
+    borderBottomColor: '#A65000',
   },
   tabText: {
     fontSize: 16,
     color: '#666',
   },
   activeTabText: {
-    color: '#667eea',
+    color: '#A65000',
     fontWeight: '600',
   },
   primaryAction: {
     marginTop: 6,
     marginHorizontal: 10,
-    backgroundColor: '#667eea',
+    backgroundColor: '#A65000',
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
   },
   primaryActionText: {
-    color: 'white',
+    color: '#252438',
     fontWeight: '700',
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#111827',
+    backgroundColor: '#FFF9F2',
   },
   modalHeader: {
+    backgroundColor:'#FFF0DB',borderBottomLeftRadius:26,borderBottomRightRadius:26,
     paddingTop: 50,
     paddingHorizontal: 20,
     paddingBottom: 16,
@@ -874,31 +831,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalTitle: {
-    color: 'white',
+    color: '#252438',
     fontSize: 20,
     fontWeight: '700',
   },
   modalClose: {
-    color: 'white',
+    color: '#252438',
     fontSize: 20,
   },
   modalBody: {
     padding: 20,
   },
   modalLabel: {
-    color: 'rgba(255,255,255,0.9)',
+    color: '#252438',
     marginTop: 12,
     marginBottom: 6,
     fontWeight: '600',
   },
   modalInputBox: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   modalInput: {
-    color: 'white',
+    color: '#252438',
   },
   modalSaveButton: {
     marginTop: 18,
@@ -908,7 +865,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalSaveText: {
-    color: 'white',
+    color: '#252438',
     fontWeight: '700',
   },
   tabContent: {
@@ -1029,7 +986,7 @@ const styles = StyleSheet.create({
   },
   goalCard: {
     width: '48%',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#FFF9F2',
     padding: 15,
     borderRadius: 10,
     margin: '1%',
@@ -1038,7 +995,7 @@ const styles = StyleSheet.create({
   goalValue: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#667eea',
+    color: '#A65000',
   },
   goalLabel: {
     fontSize: 14,
@@ -1054,7 +1011,7 @@ const styles = StyleSheet.create({
   },
   goalProgressBar: {
     height: '100%',
-    backgroundColor: '#667eea',
+    backgroundColor: '#A65000',
     borderRadius: 3,
   },
   goalPercent: {
@@ -1129,17 +1086,18 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   syncButton: {
-    backgroundColor: '#667eea',
+    backgroundColor: '#A65000',
     padding: 15,
     borderRadius: 12,
     margin: 20,
     alignItems: 'center',
   },
   syncButtonText: {
-    color: 'white',
+    color: '#252438',
     fontSize: 16,
     fontWeight: 'bold',
   },
 });
 
 export default SleepHealthIntegration;
+

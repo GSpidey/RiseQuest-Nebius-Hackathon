@@ -1,0 +1,766 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  STAFF
+  ADMIN
+  SUPERADMIN
+}
+
+model User {
+  /// Google Sign-In email (acts as stable userId)
+  id        String   @id @db.Text
+  name      String?  @db.Text
+  phoneNumber String? @unique @map("phone_number") @db.Text
+  passwordHash String? @map("password_hash") @db.Text
+  authProvider String? @map("auth_provider") @db.Text
+  photoUrl  String?  @map("photo_url") @db.Text
+  bannerUrl String?  @map("banner_url") @db.Text
+  role      UserRole @default(USER) @map("role")
+  disabledAt DateTime? @map("disabled_at")
+  premiumTrialStartedAt DateTime? @map("premium_trial_started_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  rechargeAgreement RechargeAgreement?
+  rechargeAttempts RechargeAttempt[]
+  rechargeConsents RechargeConsent[]
+  profile UserProfile?
+  familyConsents FamilyConsent[]
+  managedChildren ChildAccount[] @relation("Guardian")
+  childAccount ChildAccount? @relation("Child")
+  appleIdentity AppleIdentity?
+  storeAccount StoreAccount?
+  storePurchases StorePurchase[]
+  xpGrants XpGrant[]
+  cosmetics CosmeticOwnership[]
+  cosmeticLoadout CosmeticLoadout?
+  cosmeticRequests CosmeticPurchaseRequest[] @relation("CosmeticChild")
+  cosmeticApprovals CosmeticPurchaseRequest[] @relation("CosmeticParent")
+  goldenIdentity GoldenIdentity?
+
+  quests Quest[]
+  stripeCustomer StripeCustomer?
+  subscriptions Subscription[]
+  paymentIntents PaymentIntent[]
+  risePointsBalance RisePointsBalance?
+  risePointsTransactions RisePointsTransaction[]
+
+  alarmEvents AlarmEvent[]
+  coachChatMessages CoachChatMessage[]
+  sleepEntries SleepEntry[]
+
+  // Community
+  communitySettings CommunitySettings?
+  communityBuddiesA CommunityBuddy[] @relation("CommunityBuddyUserA")
+  communityBuddiesB CommunityBuddy[] @relation("CommunityBuddyUserB")
+  communityBuddyRequests CommunityBuddy[] @relation("CommunityBuddyRequestedBy")
+  communityGroupsCreated CommunityGroup[] @relation("CommunityGroupCreatedBy")
+  communityGroupMemberships CommunityGroupMember[]
+  communityPosts CommunityPost[]
+  communityPostReactions CommunityPostReaction[]
+  communityPostComments CommunityPostComment[]
+  communityThreadMemberships CommunityThreadMember[]
+  communityMessagesSent CommunityMessage[]
+  communityBlocksByMe CommunityBlock[] @relation("CommunityBlockBlocker")
+  communityBlocksAgainstMe CommunityBlock[] @relation("CommunityBlockBlocked")
+  communityReports CommunityReport[]
+
+  passwordResetTokens PasswordResetToken[]
+
+  // Admin / Support
+  supportTickets SupportTicket[]
+  supportTicketsAssigned SupportTicket[] @relation("SupportAssignedTo")
+  adminAuditLogs AdminAuditLog[] @relation("AdminAuditActor")
+  adminAuditTargets AdminAuditLog[] @relation("AdminAuditTarget")
+
+  @@map("users")
+}
+
+model UserProfile {
+  userId String @id @map("user_id") @db.Text
+  data Json @default("{}")
+  version Int @default(1)
+  completedAt DateTime? @map("completed_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model AppleIdentity {
+  subject String @id @db.Text
+  userId String @unique @map("user_id") @db.Text
+  refreshToken Bytes @map("refresh_token")
+  createdAt DateTime @default(now()) @map("created_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("apple_identities")
+}
+
+model AuthChallenge {
+  id String @id @default(uuid()) @db.Text
+  nonceHash String @map("nonce_hash") @db.Text
+  expiresAt DateTime @map("expires_at")
+  usedAt DateTime? @map("used_at")
+  @@index([expiresAt])
+  @@map("auth_challenges")
+}
+
+model AccountDeletion {
+  id String @id @default(uuid()) @db.Text
+  userId String? @unique @map("user_id") @db.Text
+  ownerHash String @map("owner_hash") @db.Text
+  status String @default("PENDING") @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  completedAt DateTime? @map("completed_at")
+  attempts Int @default(0)
+  @@index([status, createdAt])
+  @@map("account_deletions")
+}
+
+model StoreAccount {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @unique @map("user_id") @db.Text
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("store_accounts")
+}
+
+model StorePurchase {
+  id String @id @db.Text
+  userId String? @map("user_id") @db.Text
+  store String @db.Text
+  productId String @map("product_id") @db.Text
+  originalId String @map("original_id") @db.Text
+  kind String @db.Text
+  status String @db.Text
+  environment String @db.Text
+  expiresAt DateTime? @map("expires_at")
+  observedAt DateTime @map("observed_at")
+  token Bytes?
+  pointsGranted Int @default(0) @map("points_granted")
+  pointsRecovered Int @default(0) @map("points_recovered")
+  lastReconciledAt DateTime? @map("last_reconciled_at")
+  purchasedAt DateTime? @map("purchased_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  @@index([userId, kind, expiresAt])
+  @@index([store, originalId])
+  @@index([store, lastReconciledAt])
+  @@map("store_purchases")
+}
+
+model StoreNotification {
+  id String @id @db.Text
+  processedAt DateTime @default(now()) @map("processed_at")
+  @@map("store_notifications")
+}
+
+model FamilyConsent {
+  id String @id @default(uuid()) @db.Text
+  parentId String @map("parent_id") @db.Text
+  status String @default("AWAITING_EMAIL") @db.Text
+  noticeVersion String @map("notice_version") @db.Text
+  emailTokenHash String? @map("email_token_hash") @db.Text
+  emailTokenExpiresAt DateTime? @map("email_token_expires_at")
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  document Bytes?
+  documentHash String? @map("document_hash") @db.Text
+  reviewedBy String? @map("reviewed_by") @db.Text
+  reviewedAt DateTime? @map("reviewed_at")
+  reviewNote String? @map("review_note") @db.Text
+  withdrawnAt DateTime? @map("withdrawn_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  parent User @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  child ChildAccount?
+  @@index([parentId])
+  @@index([status])
+  @@map("family_consents")
+}
+
+model ChildAccount {
+  childId String @id @map("child_id") @db.Text
+  parentId String @map("parent_id") @db.Text
+  consentId String @unique @map("consent_id") @db.Text
+  adsConsent Boolean @default(false) @map("ads_consent")
+  createdAt DateTime @default(now()) @map("created_at")
+  child User @relation("Child", fields: [childId], references: [id], onDelete: Cascade)
+  parent User @relation("Guardian", fields: [parentId], references: [id], onDelete: Cascade)
+  consent FamilyConsent @relation(fields: [consentId], references: [id], onDelete: Restrict)
+  @@index([parentId])
+  @@map("child_accounts")
+}
+
+model SupportTicket {
+  id          String   @id @default(cuid()) @db.Text
+  userId      String?  @map("user_id") @db.Text
+  userEmail   String?  @map("user_email") @db.Text
+  subject     String   @db.Text
+  message     String   @db.Text
+  status      String   @default("OPEN") @db.Text
+  assignedTo  String?  @map("assigned_to") @db.Text
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  assignedAdmin User? @relation("SupportAssignedTo", fields: [assignedTo], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([userId])
+  @@map("support_tickets")
+}
+
+model AdminAuditLog {
+  id         String   @id @default(cuid()) @db.Text
+  actorId    String   @map("actor_id") @db.Text
+  action     String   @db.Text
+  targetUserId String? @map("target_user_id") @db.Text
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  actor User @relation("AdminAuditActor", fields: [actorId], references: [id], onDelete: Cascade)
+  targetUser User? @relation("AdminAuditTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([createdAt])
+  @@index([targetUserId])
+  @@map("admin_audit_logs")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid()) @db.Text
+  userId    String   @map("user_id") @db.Text
+  tokenHash String   @map("token_hash") @db.Text
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+model StripeWebhookEvent {
+  id          String   @id @db.Text
+  type        String   @db.Text
+  processedAt DateTime @default(now()) @map("processed_at")
+
+  @@map("stripe_webhook_events")
+}
+
+model Quest {
+  id                   String   @id @default(cuid()) @db.Text
+  userId               String   @map("user_id") @db.Text
+  title                String   @db.Text
+  description          String   @db.Text
+  difficulty           String   @db.Text
+  category             String   @db.Text
+  breakdownSource      String   @default("legacy") @map("breakdown_source") @db.Text
+  status               String   @db.Text
+  progress             Int      @default(0)
+  totalSteps           Int      @map("total_steps")
+  currentStep          Int      @map("current_step")
+  estimatedTotalMinutes Int     @map("estimated_total_minutes")
+  tags                 Json     @default("[]")
+  reminderEnabled      Boolean  @default(false) @map("reminder_enabled")
+  reminderTime         DateTime? @map("reminder_time")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  completedAt          DateTime? @map("completed_at")
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subtasks QuestSubtask[]
+
+  @@index([userId])
+  @@map("quests")
+}
+
+model QuestSubtask {
+  id              String   @id @default(cuid()) @db.Text
+  questId         String   @map("quest_id") @db.Text
+  title           String   @db.Text
+  description     String   @db.Text
+  order           Int      @map("sort_order")
+  completed       Boolean  @default(false)
+  completedAt     DateTime? @map("completed_at")
+  estimatedMinutes Int     @map("estimated_minutes")
+  difficulty      String   @db.Text
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  quest Quest @relation(fields: [questId], references: [id], onDelete: Cascade)
+
+  @@unique([questId, order])
+  @@index([questId])
+  @@map("quest_subtasks")
+}
+
+model StripeCustomer {
+  userId          String   @id @map("user_id") @db.Text
+  stripeCustomerId String  @unique @map("stripe_customer_id") @db.Text
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("stripe_customers")
+}
+
+model Subscription {
+  id                 String   @id @default(cuid()) @db.Text
+  userId             String   @map("user_id") @db.Text
+  stripeSubscriptionId String @unique @map("stripe_subscription_id") @db.Text
+  status             String   @db.Text
+  priceId            String?  @map("price_id") @db.Text
+  currentPeriodEnd   DateTime? @map("current_period_end")
+  cancelAtPeriodEnd  Boolean  @default(false) @map("cancel_at_period_end")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("subscriptions")
+}
+
+model PaymentIntent {
+  id                  String   @id @default(cuid()) @db.Text
+  userId              String?  @map("user_id") @db.Text
+  stripePaymentIntentId String @unique @map("stripe_payment_intent_id") @db.Text
+  amount              Int
+  currency            String   @db.Text
+  status              String   @db.Text
+  type                String   @db.Text
+  metadata            Json     @default("{}")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("payment_intents")
+}
+
+model RisePointsBalance {
+  userId    String   @id @map("user_id") @db.Text
+  balance   Int      @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("rise_points_balances")
+}
+
+model RisePointsTransaction {
+  id                 String   @id @default(cuid()) @db.Text
+  userId             String   @map("user_id") @db.Text
+  delta              Int
+  reason             String   @db.Text
+  metadata           Json     @default("{}")
+  stripePaymentIntentId String? @unique @map("stripe_payment_intent_id") @db.Text
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("rise_points_transactions")
+}
+
+model AlarmEvent {
+  id        String   @id @default(cuid()) @db.Text
+  userId    String   @map("user_id") @db.Text
+  alarmId   String?  @map("alarm_id") @db.Text
+  type      String   @db.Text
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("alarm_events")
+}
+
+model CoachChatMessage {
+  id          String   @id @default(cuid()) @db.Text
+  userId      String   @map("user_id") @db.Text
+  role        String   @db.Text // user|assistant
+  personality String   @default("motivational") @db.Text
+  content     String   @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("coach_chat_messages")
+}
+
+model SleepEntry {
+  id             String   @id @default(cuid()) @db.Text
+  userId         String   @map("user_id") @db.Text
+  dateKey        String   @map("date_key") @db.Text // YYYY-MM-DD (UTC)
+  bedtimeAt      DateTime @map("bedtime_at")
+  wakeAt         DateTime @map("wake_at")
+  durationMinutes Int     @map("duration_minutes")
+  sleepQuality   Int      @map("sleep_quality") // 0-100
+  notes          String?  @db.Text
+  source         String   @default("manual") @db.Text // manual|alarm|wearable
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([dateKey])
+  @@map("sleep_entries")
+}
+
+model CommunitySettings {
+  userId     String   @id @map("user_id") @db.Text
+  optIn      Boolean  @default(false) @map("opt_in")
+  visibility String   @default("BUDDIES") @db.Text
+  teenSafety Boolean  @default(false) @map("teen_safety")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("community_settings")
+}
+
+model CommunityBuddy {
+  id            String   @id @default(cuid()) @db.Text
+  userAId       String   @map("user_a_id") @db.Text
+  userBId       String   @map("user_b_id") @db.Text
+  requestedById String   @map("requested_by_id") @db.Text
+  status        String   @default("PENDING") @db.Text
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  userA       User @relation("CommunityBuddyUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB       User @relation("CommunityBuddyUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  requestedBy User @relation("CommunityBuddyRequestedBy", fields: [requestedById], references: [id], onDelete: Cascade)
+
+  @@unique([userAId, userBId])
+  @@index([userAId])
+  @@index([userBId])
+  @@index([requestedById])
+  @@map("community_buddies")
+}
+
+model CommunityGroup {
+  id          String   @id @default(cuid()) @db.Text
+  name        String   @db.Text
+  topic       String   @db.Text
+  isPublic    Boolean  @default(true) @map("is_public")
+  createdById String   @map("created_by_id") @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  createdBy User @relation("CommunityGroupCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  members   CommunityGroupMember[]
+  posts     CommunityPost[]
+
+  @@index([topic])
+  @@index([isPublic])
+  @@map("community_groups")
+}
+
+model CommunityGroupMember {
+  id        String   @id @default(cuid()) @db.Text
+  groupId   String   @map("group_id") @db.Text
+  userId    String   @map("user_id") @db.Text
+  role      String   @default("MEMBER") @db.Text
+  status    String   @default("ACTIVE") @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  group CommunityGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([userId])
+  @@map("community_group_members")
+}
+
+model CommunityPost {
+  id         String   @id @default(cuid()) @db.Text
+  authorId   String   @map("author_id") @db.Text
+  groupId    String?  @map("group_id") @db.Text
+  visibility String   @default("BUDDIES") @db.Text
+  type       String   @default("POST") @db.Text
+  content    String   @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  author    User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  group     CommunityGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  reactions CommunityPostReaction[]
+  comments  CommunityPostComment[]
+
+  @@index([createdAt])
+  @@index([authorId])
+  @@index([groupId])
+  @@index([visibility])
+  @@map("community_posts")
+}
+
+model CommunityPostReaction {
+  id        String   @id @default(cuid()) @db.Text
+  postId    String   @map("post_id") @db.Text
+  userId    String   @map("user_id") @db.Text
+  emoji     String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId, emoji])
+  @@index([userId])
+  @@map("community_post_reactions")
+}
+
+model CommunityPostComment {
+  id        String   @id @default(cuid()) @db.Text
+  postId    String   @map("post_id") @db.Text
+  authorId  String   @map("author_id") @db.Text
+  content   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post   CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([authorId])
+  @@map("community_post_comments")
+}
+
+model CommunityMessageThread {
+  id        String   @id @default(cuid()) @db.Text
+  kind      String   @default("DIRECT") @db.Text
+  directKey String?  @unique @map("direct_key") @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  members  CommunityThreadMember[]
+  messages CommunityMessage[]
+
+  @@map("community_message_threads")
+}
+
+model CommunityThreadMember {
+  threadId  String   @map("thread_id") @db.Text
+  userId    String   @map("user_id") @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  thread CommunityMessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([threadId, userId])
+  @@index([userId])
+  @@map("community_thread_members")
+}
+
+model CommunityMessage {
+  id        String   @id @default(cuid()) @db.Text
+  threadId  String   @map("thread_id") @db.Text
+  senderId  String   @map("sender_id") @db.Text
+  content   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  thread CommunityMessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender User                  @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+  @@index([senderId])
+  @@index([createdAt])
+  @@map("community_messages")
+}
+
+model CommunityBlock {
+  blockerId String   @map("blocker_id") @db.Text
+  blockedId String   @map("blocked_id") @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  blocker User @relation("CommunityBlockBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("CommunityBlockBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+  @@map("community_blocks")
+}
+
+model CommunityReport {
+  id         String   @id @default(cuid()) @db.Text
+  reporterId String   @map("reporter_id") @db.Text
+  targetType String   @map("target_type") @db.Text
+  targetId   String   @map("target_id") @db.Text
+  reason     String   @db.Text
+  details    String?  @db.Text
+  status     String   @default("OPEN") @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  reporter User @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@index([targetType, targetId])
+  @@index([reporterId])
+  @@index([status])
+  @@map("community_reports")
+}
+
+model CosmeticOwnership {
+  userId    String   @map("user_id") @db.Text
+  itemId    String   @map("item_id") @db.Text
+  source    String   @db.Text
+  reference String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, itemId])
+  @@map("cosmetic_ownership")
+}
+
+model CosmeticLoadout {
+  userId      String   @id @map("user_id") @db.Text
+  themeId     String?  @map("theme_id") @db.Text
+  soundId     String?  @map("sound_id") @db.Text
+  animationId String?  @map("animation_id") @db.Text
+  badgeIds    Json     @default("[]") @map("badge_ids")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("cosmetic_loadouts")
+}
+
+model CosmeticTheme {
+  id          String   @id @db.Text
+  name        String   @db.Text
+  description String   @db.Text
+  price       Int
+  design      Json
+  published Json?
+  status      String   @default("DRAFT") @db.Text
+  revision    Int      @default(1)
+  createdBy   String   @map("created_by") @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("cosmetic_themes")
+}
+
+
+model CosmeticPurchaseRequest {
+  id         String    @id @default(uuid()) @db.Text
+  childId    String    @map("child_id") @db.Text
+  parentId   String    @map("parent_id") @db.Text
+  consentId  String    @map("consent_id") @db.Text
+  itemIds    Json      @map("item_ids")
+  amount     Int
+  status     String    @default("PENDING") @db.Text
+  requestKey String    @unique @map("request_key") @db.Text
+  createdAt  DateTime  @default(now()) @map("created_at")
+  expiresAt  DateTime  @map("expires_at")
+  resolvedAt DateTime? @map("resolved_at")
+  child      User      @relation("CosmeticChild", fields: [childId], references: [id], onDelete: Cascade)
+  parent     User      @relation("CosmeticParent", fields: [parentId], references: [id], onDelete: Cascade)
+
+  @@index([parentId, status])
+  @@map("cosmetic_purchase_requests")
+}
+
+model ThemeGeneration {
+  id          String   @id @db.Text
+  actorId     String   @map("actor_id") @db.Text
+  requestHash String   @map("request_hash") @db.Text
+  status      String   @default("RUNNING") @db.Text
+  result      Json?
+  diagnostic  String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("theme_generations")
+}
+
+model GoldenIdentity {
+  subject   String   @id @db.Text
+  userId    String   @unique @map("user_id") @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("golden_identities")
+}
+
+model GoldenAuthSession {
+  id        String   @id @db.Text
+  pollHash  String   @unique @map("poll_hash") @db.Text
+  secret    Bytes
+  status    String   @default("PENDING") @db.Text
+  result    Bytes?
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@map("golden_auth_sessions")
+}
+
+model XpGrant {
+  id String @id @db.Text
+  userId String @map("user_id") @db.Text
+  amount Int
+  source String @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, source])
+  @@map("xp_grants")
+}
+
+
+model RechargeAgreement {
+  userId String @id @map("user_id") @db.Text
+  data Json @default("{}")
+  revision Int @default(1)
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("recharge_agreements")
+}
+model RechargeAttempt {
+  id String @id @db.Text
+  userId String @map("user_id") @db.Text
+  agreementRevision Int @map("agreement_revision")
+  amount Int
+  points Int
+  currency String @db.Text
+  pack String @db.Text
+  customerId String @map("customer_id") @db.Text
+  paymentMethod String @map("payment_method") @db.Text
+  period String @db.Text
+  status String @default("reserved") @db.Text
+  stripeId String? @unique @map("stripe_id") @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, period])
+  @@index([status, updatedAt])
+  @@map("recharge_attempts")
+}
+model RechargeConsent {
+  id String @id @default(cuid()) @db.Text
+  userId String @map("user_id") @db.Text
+  revision Int
+  data Json
+  createdAt DateTime @default(now()) @map("created_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, revision])
+  @@map("recharge_consents")
+}

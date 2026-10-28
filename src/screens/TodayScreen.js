@@ -1,5 +1,7 @@
+import { AppAlert as Alert } from '../components/AppModal';
+import { XpBar } from '../components/ProgressCard';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, ScrollView, View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
+import { ScrollView, View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LinearGradient from 'react-native-linear-gradient';
 import questService from '../services/QuestService';
@@ -60,7 +62,7 @@ export default function TodayScreen({ userProfile, isGuest, premium, adsSuppress
   ].filter(Boolean).join('  ·  ') : weatherLoading ? 'Weather…' : 'Weather unavailable';
   const showWeather = () => {
     const details = hasWeather
-      ? `${weather.city || ''} ${weather.description || ''}\n${typeof weather.apparentTemperatureExact === 'number' ? `Feels like ${weather.apparentTemperatureExact.toFixed(1)}°C\n` : ''}${WeatherService.getWeatherAdvice(weather)}`.trim()
+      ? `${weather.city || 'Your area'} ${weather.description || ''}\n${typeof weather.apparentTemperatureExact === 'number' ? `Feels like ${weather.apparentTemperatureExact.toFixed(1)}°C\n` : ''}${weather.stale?'Showing the last available reading.\n':''}${WeatherService.getWeatherAdvice(weather)}`.trim()
       : String(weather?.error || 'Refresh to see your local weather.');
     Alert.alert('Today’s weather', details, [{ text: 'Close', style: 'cancel' }, { text: 'Refresh', onPress: onRefreshWeather }]);
   };
@@ -90,12 +92,15 @@ export default function TodayScreen({ userProfile, isGuest, premium, adsSuppress
     <DashboardSection title="Wellness snapshot" subtitle="Make space for how you feel" color={sunrise.teal} expanded={sections.wellness} onToggle={() => toggle('wellness')}>
       <ToolRow icon="wellness" title="How are you feeling?" subtitle="Your mood check-in" onPress={() => onNavigate('wellness')} tint={sunrise.tealTint} color="#087C70" />
       <ToolRow icon="sleep" title="Sleep & recovery" subtitle="View your sleep log and insights" onPress={() => onNavigate('sleep')} tint={sunrise.blueTint} color="#1672A6" />
-      <ToolRow icon="coach" title="Your AI coach" subtitle="Talk through your next step" onPress={() => onNavigate('coach')} />
+      <ToolRow icon="coach" title="Meet your companion" subtitle="Talk, plan, and choose your character" onPress={() => onNavigate('companion')} />
+      <ToolRow icon="today" title="My daily routine" subtitle="Checklist, calendar, weather and goals" onPress={() => onNavigate('routine')} />
+      <ToolRow icon="games" title="Adaptive mind practice" subtitle="Practice your chosen skills · Premium" onPress={() => onNavigate('brain-training')} />
+      <ToolRow icon="coach" title="Coaching insights" onPress={() => onNavigate('coach')} />
       <TouchableOpacity style={[ui.button, { backgroundColor: sunrise.tealTint }]} onPress={onFocus} accessibilityRole="button"><Text style={[ui.buttonText, { color: '#075F56' }]}>Start a focus session</Text></TouchableOpacity>
     </DashboardSection>
 
     <DashboardSection title="Progress & rewards" subtitle={`Level ${stats.level} · ${stats.streak} day streak`} color={sunrise.gold} expanded={sections.progress} onToggle={() => toggle('progress')}>
-      <Text style={s.progressValue}>{stats.experience} XP</Text>
+      <Text style={s.progressValue}>{stats.experience} total XP</Text><XpBar progress={stats.progression}/>
       <Text style={ui.subtitle}>{stats.totalWakeUps} wake-ups recorded. Keep building your rhythm.</Text>
       <ToolRow icon="wallet" title={`${points} Rise Points`} subtitle="Open your wallet" onPress={() => onNavigate('wallet')} tint={sunrise.orangeTint} color="#994500" />
       <ToolRow icon="star" title="Rewards & achievements" subtitle="Explore your Rise Points rewards" onPress={onRewards} />
@@ -121,3 +126,4 @@ const s = StyleSheet.create({
   weatherStrip: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, marginBottom: 10, paddingHorizontal: 4 },
   weatherNumbers: { flexShrink: 1, color: sunrise.ink, fontSize: 14, fontWeight: '600' },
 });
+

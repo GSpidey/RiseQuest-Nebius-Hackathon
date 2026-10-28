@@ -7,6 +7,7 @@ import AppIntents
 import SwiftUI
 import CryptoKit
 import AVFoundation
+import Speech
 
 @available(iOS 26.0, *)
 struct RiseQuestAlarmMetadata: AlarmMetadata { var alarmId: String }
@@ -26,6 +27,65 @@ struct OpenRiseQuestAlarm: LiveActivityIntent {
 
 @objc(RiseQuestAlarmAudio)
 class RiseQuestAlarmAudio: RCTEventEmitter {
+  private var speechEngine: AVAudioEngine?
+  private var speechTask: SFSpeechRecognitionTask?
+  private var speechResolve: RCTPromiseResolveBlock?
+  private var speechReject: RCTPromiseRejectBlock?
+  private var speechTimeout: DispatchWorkItem?
+  private var speechSession = UUID()
+  private var speechTapInstalled = false
+  @objc func cancelListening() { DispatchQueue.main.async { self.finishSpeech(nil, nil) } }
+  private func finishSpeech(_ text: String?, _ error: String?) {
+    speechSession = UUID()
+    speechTimeout?.cancel(); speechTimeout = nil
+    let resolve = speechResolve; let reject = speechReject
+    speechResolve = nil; speechReject = nil
+    speechTask?.cancel(); speechTask = nil
+    if let engine = speechEngine { engine.stop(); if speechTapInstalled { engine.inputNode.removeTap(onBus: 0) } }; speechEngine = nil; speechTapInstalled = false
+    try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    if let message = error { reject?("SPEECH_INPUT", message, nil) } else { resolve?(text) }
+  }
+  @objc func listenOnce(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+    DispatchQueue.main.async {
+      guard self.speechResolve == nil else { reject("SPEECH_BUSY", "Finish the current message first.", nil); return }
+      let sessionID = UUID(); self.speechSession = sessionID
+      self.speechResolve = resolve; self.speechReject = reject
+      SFSpeechRecognizer.requestAuthorization { status in
+        AVAudioSession.sharedInstance().requestRecordPermission { allowed in
+          DispatchQueue.main.async {
+            guard self.speechResolve != nil && self.speechSession == sessionID else { return }
+            guard status == .authorized && allowed, let recognizer = SFSpeechRecognizer(), recognizer.isAvailable else {
+              self.finishSpeech(nil, "Enable microphone and speech recognition, or type instead."); return
+            }
+            do {
+              let session = AVAudioSession.sharedInstance()
+              try session.setCategory(.record, mode: .measurement)
+              try session.setActive(true)
+              let engine = AVAudioEngine(); self.speechEngine = engine
+              let request = SFSpeechAudioBufferRecognitionRequest()
+              request.shouldReportPartialResults = false
+              if recognizer.supportsOnDeviceRecognition { request.requiresOnDeviceRecognition = true }
+              let input = engine.inputNode
+              let format = input.outputFormat(forBus: 0)
+              guard format.sampleRate > 0 && format.channelCount > 0 else { self.finishSpeech(nil, "No microphone is available."); return }
+              input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in request.append(buffer) }
+              self.speechTapInstalled = true
+              self.speechTask = recognizer.recognitionTask(with: request) { result, error in
+                DispatchQueue.main.async {
+                  guard self.speechSession == sessionID else { return }
+                  if let result = result, result.isFinal { self.finishSpeech(result.bestTranscription.formattedString, nil) }
+                  else if error != nil { self.finishSpeech(nil, "Speech could not be recognized. Try again or type your message.") }
+                }
+              }
+              engine.prepare(); try engine.start()
+              let timeout = DispatchWorkItem { if self.speechSession == sessionID { self.finishSpeech(nil, nil) } }
+              self.speechTimeout = timeout; DispatchQueue.main.asyncAfter(deadline: .now() + 25, execute: timeout)
+            } catch { self.finishSpeech(nil, "Voice input is unavailable. You can type instead.") }
+          }
+        }
+      }
+    }
+  }
   private var observing = false
   private var updates: Task<Void, Never>?
   private var picker: UIDatePicker?
@@ -116,7 +176,7 @@ class RiseQuestAlarmAudio: RCTEventEmitter {
   func cacheSpeech(_ fingerprint: String, encoded: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
     do {
       guard fingerprint.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil,
-        encoded.count <= 1600100, let data = Data(base64Encoded: encoded), data.count >= 46, data.count <= 1200044,
+        encoded.count <= 19200100, let data = Data(base64Encoded: encoded), data.count >= 46, data.count <= 14400044,
         String(data: data.prefix(4), encoding: .ascii) == "RIFF" else { throw NSError(domain: "RiseQuest", code: 3) }
       let target = try speechFolder().appendingPathComponent("\(fingerprint).wav")
       try data.write(to: target, options: .atomic)
@@ -246,3 +306,4 @@ class RiseQuestAlarmAudio: RCTEventEmitter {
     }
   }
 }
+

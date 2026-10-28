@@ -1,5 +1,6 @@
+import Modal from './components/AppModal';
 import React from 'react';
-import { Modal, ScrollView, Text, TouchableOpacity, View, StyleSheet } from 'react-native';
+import { ScrollView, Text, TouchableOpacity, View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LEGAL_DOCS } from '../backend/src/legalContent';
 
@@ -25,3 +26,4 @@ const styles = StyleSheet.create({ page: { flex: 1, backgroundColor: '#FFFAF2' }
   content: { padding: 20, paddingBottom: 40 }, section: { marginTop: 24 },
   heading: { fontSize: 20, fontWeight: '700', color: '#30243C', marginBottom: 8 },
   body: { fontSize: 16, lineHeight: 25, color: '#584E60' } });
+

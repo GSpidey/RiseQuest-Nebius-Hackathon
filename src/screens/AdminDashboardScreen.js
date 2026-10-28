@@ -1,17 +1,7 @@
+import Modal, { AppAlert as Alert } from '../components/AppModal';
 import { getAuthToken } from '../services/AuthTokenStorage';
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Linking, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LinearGradient from 'react-native-linear-gradient';
 import { getBackendBaseUrl } from '../config/backendConfig';
@@ -458,6 +448,7 @@ export default function AdminDashboardScreen({ visible, onClose }) {
           <View style={styles.header}>
             <Text style={styles.headerTitle}>🛠️ Admin</Text>
             <View style={styles.headerRight}>
+              {['ADMIN','SUPERADMIN'].includes(myRole) && <TouchableOpacity accessibilityRole="button" style={styles.headerBtn} onPress={async () => { try { await Linking.openURL(`${await getBackendBaseUrl()}/admin/`); } catch (_) { Alert.alert('Admin Studio', 'Could not open the web studio.'); } }}><Text style={styles.headerBtnText}>Studio ↗</Text></TouchableOpacity>}
               {loading ? <ActivityIndicator color="#fff" /> : null}
               <TouchableOpacity style={styles.headerBtn} onPress={onClose}>
                 <Text style={styles.headerBtnText}>Done</Text>
@@ -600,3 +591,4 @@ const styles = StyleSheet.create({
   modalClose: { fontSize: 14, fontWeight: '900', color: '#667eea' },
   hint: { color: '#64748b', marginTop: 8, fontSize: 12 },
 });
+

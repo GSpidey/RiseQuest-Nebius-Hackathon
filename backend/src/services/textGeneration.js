@@ -5,11 +5,11 @@ const { chatParameters } = require('./openaiParameters');
 // Shared generation transport; moderation never follows the generation provider.
 // Safety failures are terminal, while transport/format failures may fall back.
 async function generateText({ coaching, messages, safetyInput, temperature = 0.4,
-  maxTokens = 1800, validate = value => value, request = fetch }) {
+  maxTokens = 1800, validate = value => value, request = fetch, providers = questProviders(coaching) }) {
   if (!coaching?.externalAllowed) return { kind: 'restricted' };
   const inputSafety = await checkAiSafety(safetyInput, coaching, request);
   if (!inputSafety.allowed) return { kind: 'blocked', reply: inputSafety.reply };
-  for (const provider of questProviders(coaching)) {
+  for (const provider of providers) {
     let content;
     try {
       const parameters = provider.name === 'openai'

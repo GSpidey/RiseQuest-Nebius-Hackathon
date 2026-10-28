@@ -1,3 +1,4 @@
+import Modal, { AppAlert as Alert } from '../components/AppModal';
 /**
  * Quest Screen - Main Quest Management Interface
  * Gamified task management with AI-powered breakdown
@@ -5,18 +6,7 @@
 
 import { sunrise } from '../components/SunriseUI';
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  Modal,
-  TextInput,
-  Dimensions,
-  SafeAreaView,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Dimensions, SafeAreaView } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import QuestService from '../services/QuestService';
 import { isLocalQuest } from '../services/questRepository';
@@ -91,27 +81,27 @@ const QuestScreen = ({ userProfile, onClose }) => {
       });
 
       // Award Rise Points for creating a quest
-      if (!isLocalQuest(newQuest)) await MonetizationService.addRisePoints(
-        MonetizationService.RISE_POINT_REWARDS.QUEST_CREATED,
-        'creating a new quest', { questId: newQuest.id }
-      );
+      if (!isLocalQuest(newQuest)) {
+        try {
+          await MonetizationService.addRisePoints(
+            MonetizationService.RISE_POINT_REWARDS.QUEST_CREATED,
+            'creating a new quest', { questId: newQuest.id }
+          );
+        } catch (error) {
+          // The quest is already saved. A wallet refresh failure must not invite
+          // another create request or report that the saved task was lost.
+          console.warn('Quest saved; reward refresh unavailable:', error?.message);
+        }
+      }
 
       setShowCreateModal(false);
       loadQuests();
       loadQuestStats();
 
-      Alert.alert(
-        isLocalQuest(newQuest) ? 'Saved on this device' : 'Quest Created! 🎯',
-        isLocalQuest(newQuest) ? 'These are prepared offline suggestions, not an AI response. This quest is saved only on this device; it does not earn Rise Points or sync to your account.' :
-          `Your quest "${newQuest.title}" has ${newQuest.totalSteps} suggested steps. ${newQuest.breakdownSource === 'ai' ? 'AI-generated suggestions — review them before starting.' : 'Prepared suggestions — not a live AI response.'}`,
-        [
-          { text: 'View Quest', onPress: () => {} },
-          { text: 'Start Focus Mode', onPress: () => enterFocusMode(newQuest) }
-        ]
-      );
+      return newQuest;
     } catch (error) {
       console.error('Error creating quest:', error);
-      Alert.alert('Error', 'Failed to create quest');
+      throw error; // The form owns recoverable errors and must retain the draft.
     }
   };
 
@@ -614,3 +604,4 @@ const styles = StyleSheet.create({
 });
 
 export default QuestScreen;
+

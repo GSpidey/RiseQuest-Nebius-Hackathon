@@ -1,57 +1,18 @@
-import Geolocation from 'react-native-geolocation-service';
-import { PermissionsAndroid, Platform } from 'react-native';
+import {deviceLocation} from '../services/deviceLocation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const LocationService = {
   async requestLocationPermission() {
-    try {
-      if (Platform.OS === 'android') {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-          {
-            title: 'Location Permission',
-            message: 'RiseQuest needs access to your location for smart alarms',
-            buttonNeutral: 'Ask Me Later',
-            buttonNegative: 'Cancel',
-            buttonPositive: 'OK',
-          }
-        );
-        return granted === PermissionsAndroid.RESULTS.GRANTED;
-      }
-      return true;
-    } catch (error) {
-      console.error('Location permission error:', error);
-      return false;
-    }
+    try { return await deviceLocation.authorize(true); } catch (_) { return false; }
   },
 
   async getCurrentLocation() {
     try {
-      const hasPermission = await this.requestLocationPermission();
-      if (!hasPermission) {
-        return { error: 'Location permission denied' };
-      }
-
-      return new Promise((resolve, reject) => {
-        Geolocation.getCurrentPosition(
-          (position) => {
-            resolve({
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-              address: { name: 'Current Location' }, // Simplified for React Native CLI
-              timestamp: Date.now(),
-            });
-          },
-          (error) => {
-            console.error('Location fetch error:', error);
-            resolve({ error: 'Could not get current location' });
-          },
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-        );
-      });
+      const position = await deviceLocation.current({requestPermission: true});
+      return {...position.coords, address: {name: 'Current Location'}, timestamp: Date.now()};
     } catch (error) {
-      console.error('Location fetch error:', error);
-      return { error: 'Could not get current location' };
+      console.warn('Location fetch failed', error);
+      return {error: 'Location unavailable. Check permission and try again.'};
     }
   },
 

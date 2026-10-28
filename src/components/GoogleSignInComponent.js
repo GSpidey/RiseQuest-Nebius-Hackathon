@@ -1,13 +1,6 @@
+import { AppAlert as Alert } from './AppModal';
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image, ActivityIndicator } from 'react-native';
 import { GoogleAuthService } from '../services/GoogleAuthService';
 import LinearGradient from 'react-native-linear-gradient';
 
@@ -300,3 +293,4 @@ const styles = StyleSheet.create({
 });
 
 export default GoogleSignInComponent;
+

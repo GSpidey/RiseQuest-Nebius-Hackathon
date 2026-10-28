@@ -1,17 +1,10 @@
+import ModalHeading from './ModalHeading';
+import Modal, { AppAlert as Alert } from './AppModal';
+import KeyboardSurface from './KeyboardSurface';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { sunrise } from './SunriseUI';
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Modal,
-  Switch,
-  TextInput,
-  Alert,
-  Dimensions,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch, TextInput, Dimensions, Platform } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { GoogleLocationService } from '../services/GoogleLocationService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -63,6 +56,9 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
   const [locationError, setLocationError] = useState(null);
   const [trackingEnabled, setTrackingEnabled] = useState(true);
   const [lastFixAt, setLastFixAt] = useState(null);
+  const lastSuccessRef=useRef(0), requestRef=useRef(0), aliveRef=useRef(true);
+  const [clock,setClock]=useState(Date.now());
+  useEffect(()=>{aliveRef.current=true;const tick=setInterval(()=>setClock(Date.now()),30000);return()=>{aliveRef.current=false;requestRef.current++;clearInterval(tick);};},[]);
   const [recentLocationEvents, setRecentLocationEvents] = useState([]);
   const [detectedProfile, setDetectedProfile] = useState(null);
   const [showLocationModal, setShowLocationModal] = useState(false);
@@ -87,6 +83,7 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
   const [recommendationsStatus, setRecommendationsStatus] = useState('idle'); // idle | loading | ready
 
   const watchIdRef = useRef(null);
+  const watchGeneration = useRef(0);
   const lastGeocodeRef = useRef({ at: 0, latitude: null, longitude: null });
   const lastRecsRef = useRef({ at: 0, key: '' });
 
@@ -102,7 +99,6 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
   useEffect(() => {
     loadLocationProfiles();
     getCurrentLocation();
-    checkLocationPermissions();
     loadLastKnownLocation();
     loadRecentLocationEvents();
 
@@ -166,10 +162,15 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
   };
 
   const getCurrentLocation = async () => {
+    if(locationBusy)return;
+    const requestedAt=Date.now(), request=++requestRef.current;
+    let timedOut=false;
+    const watchdog=setTimeout(()=>{if(!aliveRef.current||request!==requestRef.current)return;timedOut=true;setLocationBusy(false);if(lastSuccessRef.current<requestedAt)setLocationError('No location fix yet. In flight mode or indoors, a signal may be unavailable. Try again when you have a clearer signal.');},25000);
     setLocationBusy(true);
     setLocationError(null);
     try {
-      const location = await GoogleLocationService.getCurrentLocation();
+      const location = await GoogleLocationService.getCurrentLocation({requestPermission:true,onCoordinates:fix=>{if(!aliveRef.current||request!==requestRef.current||timedOut)return;setLocationBusy(false);lastSuccessRef.current=Date.now();setCurrentLocation({coords:{latitude:fix.latitude,longitude:fix.longitude},accuracy:fix.accuracy,address:null});setLastFixAt(fix.timestamp);setLocationError(null);void AsyncStorage.setItem('risequest_last_location_fix',JSON.stringify({coords:{latitude:fix.latitude,longitude:fix.longitude},accuracy:fix.accuracy,address:null,at:fix.timestamp})).catch(()=>{});}});
+      if(!aliveRef.current||request!==requestRef.current||timedOut)return;
       if (location?.error) {
         throw new Error(location.error);
       }
@@ -186,12 +187,12 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
           street: address.formatted_address || '',
           city: address.locality || '',
           region: address.administrative_area_level_1 || '',
-          postalCode: address.postal_code || '',
+          postalCode: address.postal_code || '', attribution: address.attribution || null,
         },
       };
 
-      setCurrentLocation(nextCurrent);
-      setLastFixAt(Date.now());
+      if(lastSuccessRef.current<=requestedAt||!lastSuccessRef.current){setCurrentLocation(nextCurrent);setLastFixAt(location.timestamp||Date.now());}
+      else setCurrentLocation(prev=>prev&&Math.abs(prev.coords.latitude-nextCurrent.coords.latitude)<.002&&Math.abs(prev.coords.longitude-nextCurrent.coords.longitude)<.002?{...prev,address:nextCurrent.address}:prev);
       try {
         await AsyncStorage.setItem(
           'risequest_last_location_fix',
@@ -199,45 +200,20 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
             coords: nextCurrent.coords,
             accuracy: nextCurrent.accuracy,
             address: nextCurrent.address,
-            at: Date.now(),
+            at: location.timestamp || Date.now(),
           })
         );
       } catch (_) {
         // ignore
       }
 
-      // If we have a default Home profile without coordinates yet, seed it from current GPS.
-      let seededHome = null;
-      setLocationProfiles((prev) => {
-        try {
-          const homeIdx = prev.findIndex((p) => p?.isDefault && p?.type === 'home' && !p?.coordinates);
-          if (homeIdx === -1) return prev;
-
-          const updated = [...prev];
-          updated[homeIdx] = {
-            ...updated[homeIdx],
-            coordinates: {
-              latitude: nextCurrent.coords.latitude,
-              longitude: nextCurrent.coords.longitude,
-            },
-            address: nextCurrent.address?.street || updated[homeIdx].address,
-          };
-          seededHome = updated[homeIdx];
-          AsyncStorage.setItem('locationProfiles', JSON.stringify(updated)).catch(() => {});
-          return updated;
-        } catch {
-          return prev;
-        }
-      });
-
-      // Don't default the active profile to “Home” unless we actually detect a match.
-      // This avoids the UI looking hardcoded when a user deletes/changes profiles.
     } catch (error) {
       console.error('Error getting current location:', error);
-      setLocationError(error?.message || 'Could not get location');
+      if(aliveRef.current&&request===requestRef.current&&lastSuccessRef.current<requestedAt)setLocationError('No location fix yet. Check location permission and try again when you have a clearer signal. Flight mode can affect availability.');
     }
     finally {
-      setLocationBusy(false);
+      clearTimeout(watchdog);
+      if(aliveRef.current&&request===requestRef.current)setLocationBusy(false);
     }
   };
 
@@ -246,17 +222,17 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
       const raw = await AsyncStorage.getItem('risequest_last_location_fix');
       if (!raw) return;
       const parsed = JSON.parse(raw);
-      if (!parsed?.coords?.latitude || !parsed?.coords?.longitude) return;
+      if (!Number.isFinite(parsed?.coords?.latitude) || !Number.isFinite(parsed?.coords?.longitude) || Date.now()-parsed.at>24*3600000) return;
 
       setCurrentLocation((prev) => {
-        if (prev?.coords?.latitude && prev?.coords?.longitude) return prev;
+        if (Number.isFinite(prev?.coords?.latitude) && Number.isFinite(prev?.coords?.longitude)) return prev;
         return {
           coords: parsed.coords,
           accuracy: parsed.accuracy,
           address: parsed.address || null,
         };
       });
-      if (typeof parsed?.at === 'number') {
+      if (!lastSuccessRef.current && typeof parsed?.at === 'number') {
         setLastFixAt(parsed.at);
       }
     } catch (_) {
@@ -265,15 +241,16 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
   };
 
   const startLiveTracking = async () => {
+    stopLiveTracking();
+    const generation = watchGeneration.current;
     try {
       const granted = await GoogleLocationService.initialize();
-      if (!granted) return;
-
-      stopLiveTracking();
+      if (!granted || generation !== watchGeneration.current) return;
       setLocationError(null);
 
-      watchIdRef.current = GoogleLocationService.watchLocation(
+      const watchId = await GoogleLocationService.watchLocation(
         async (position) => {
+          if (generation !== watchGeneration.current) return;
           const coords = position?.coords;
           const latitude = coords?.latitude;
           const longitude = coords?.longitude;
@@ -281,12 +258,14 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
 
           const accuracy = coords?.accuracy;
           const at = Date.now();
+          lastSuccessRef.current=at;
           setLastFixAt(at);
+          setLocationError(null);
 
           setCurrentLocation((prev) => ({
             coords: { latitude, longitude },
             accuracy: accuracy ?? prev?.accuracy ?? null,
-            address: prev?.address ?? null,
+            address: prev?.coords&&calculateDistance(latitude,longitude,prev.coords.latitude,prev.coords.longitude)<.25 ? prev.address : null,
           }));
 
           try {
@@ -314,9 +293,9 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
 
           lastGeocodeRef.current = { at, latitude, longitude };
           const address = await GoogleLocationService.reverseGeocode(latitude, longitude);
-          if (!address) return;
+          if (!address || generation !== watchGeneration.current) return;
           setCurrentLocation((prev) => {
-            if (!prev?.coords) return prev;
+            if (!prev?.coords || Math.abs(prev.coords.latitude-latitude)>.002 || Math.abs(prev.coords.longitude-longitude)>.002) return prev;
             return {
               ...prev,
               address: {
@@ -324,22 +303,26 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
                 street: address.formatted_address || '',
                 city: address.locality || '',
                 region: address.administrative_area_level_1 || '',
-                postalCode: address.postal_code || '',
+                postalCode: address.postal_code || '', attribution: address.attribution || null,
               },
             };
           });
         },
         (error) => {
-          const msg = error?.message ? String(error.message) : 'Live location unavailable';
-          setLocationError(msg);
+          if (generation !== watchGeneration.current) return;
+          const msg = 'Live location unavailable. Check permission and try again.';
+          if(Date.now()-lastSuccessRef.current>120000)setLocationError(msg);
         }
       );
+      if (generation !== watchGeneration.current) GoogleLocationService.clearWatchLocation(watchId);
+      else watchIdRef.current = watchId;
     } catch (e) {
       setLocationError(e?.message ? String(e.message) : 'Live location unavailable');
     }
   };
 
   const stopLiveTracking = () => {
+    watchGeneration.current += 1;
     const id = watchIdRef.current;
     watchIdRef.current = null;
     if (id != null) {
@@ -467,13 +450,7 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
 
     pushRecentLocationEvent(profile);
 
-    if (!silent) {
-      Alert.alert(
-        '📍 Location Detected',
-        `You're now at ${profile.name}. Alarm settings have been adjusted accordingly.`,
-        [{ text: 'OK' }]
-      );
-    }
+
   };
 
   const distanceToProfileKm = (profile) => {
@@ -502,7 +479,7 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
   };
 
   const setProfileToCurrentLocation = (profile) => {
-    if (!currentLocation?.coords?.latitude || !currentLocation?.coords?.longitude) {
+    if (!Number.isFinite(currentLocation?.coords?.latitude) || !Number.isFinite(currentLocation?.coords?.longitude)) {
       Alert.alert('Location', 'Get your current location first.');
       return;
     }
@@ -784,16 +761,17 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
   };
 
   const LocationProfileModal = () => (
-    <Modal visible={showLocationModal} animationType="slide">
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.modalContainer}>
+    <Modal visible={showLocationModal} animationType="slide" onRequestClose={() => setShowLocationModal(false)}>
+      <SafeAreaProvider><SafeAreaView style={styles.modalContainer}><KeyboardSurface>
+      <LinearGradient colors={[sunrise.background, sunrise.orangeTint]} style={styles.modalContainer}>
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>📍 Add Location Profile</Text>
+          <View style={{flex:1,paddingTop:8}}><ModalHeading compact title='📍 Add Location Profile' icon="star"/></View>
           <TouchableOpacity onPress={() => setShowLocationModal(false)}>
             <Text style={styles.closeButton}>✕</Text>
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.modalContent}>
+        <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           <View style={styles.formGroup}>
             <Text style={styles.formLabel}>Location Name</Text>
             <TextInput
@@ -801,7 +779,7 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
               value={newLocationForm.name}
               onChangeText={(text) => setNewLocationForm(prev => ({ ...prev, name: text }))}
               placeholder="e.g., Home, Office, Hotel"
-              placeholderTextColor="rgba(255,255,255,0.6)"
+              placeholderTextColor={sunrise.muted}
             />
           </View>
 
@@ -831,7 +809,7 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
               value={newLocationForm.address}
               onChangeText={(text) => setNewLocationForm(prev => ({ ...prev, address: text }))}
               placeholder="Enter address or use current location"
-              placeholderTextColor="rgba(255,255,255,0.6)"
+              placeholderTextColor={sunrise.muted}
               multiline
             />
             <TouchableOpacity
@@ -898,20 +876,22 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
           </View>
         </ScrollView>
       </LinearGradient>
+      </KeyboardSurface></SafeAreaView></SafeAreaProvider>
     </Modal>
   );
 
   const TravelModeModal = () => (
-    <Modal visible={showTravelModal} animationType="slide">
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.modalContainer}>
+    <Modal visible={showTravelModal} animationType="slide" onRequestClose={() => setShowTravelModal(false)}>
+      <SafeAreaProvider><SafeAreaView style={styles.modalContainer}><KeyboardSurface>
+      <LinearGradient colors={[sunrise.background, sunrise.orangeTint]} style={styles.modalContainer}>
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>✈️ Travel Mode Setup</Text>
+          <View style={{flex:1,paddingTop:8}}><ModalHeading compact title='✈️ Travel Mode Setup' icon="star"/></View>
           <TouchableOpacity onPress={() => setShowTravelModal(false)}>
             <Text style={styles.closeButton}>✕</Text>
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.modalContent}>
+        <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           <View style={styles.formGroup}>
             <Text style={styles.formLabel}>Destination</Text>
             <TextInput
@@ -919,7 +899,7 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
               value={travelMode.destination}
               onChangeText={(text) => setTravelMode(prev => ({ ...prev, destination: text }))}
               placeholder="e.g., New York, London, Tokyo"
-              placeholderTextColor="rgba(255,255,255,0.6)"
+              placeholderTextColor={sunrise.muted}
             />
           </View>
 
@@ -930,7 +910,7 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
               value={travelMode.timeZone}
               onChangeText={(text) => setTravelMode(prev => ({ ...prev, timeZone: text }))}
               placeholder="e.g., EST, GMT+1, PST"
-              placeholderTextColor="rgba(255,255,255,0.6)"
+              placeholderTextColor={sunrise.muted}
             />
           </View>
 
@@ -941,7 +921,7 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
               value={travelMode.arrivalDate}
               onChangeText={(text) => setTravelMode(prev => ({ ...prev, arrivalDate: text }))}
               placeholder="DD/MM/YYYY"
-              placeholderTextColor="rgba(255,255,255,0.6)"
+              placeholderTextColor={sunrise.muted}
             />
           </View>
 
@@ -971,6 +951,7 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
           </View>
         </ScrollView>
       </LinearGradient>
+      </KeyboardSurface></SafeAreaView></SafeAreaProvider>
     </Modal>
   );
 
@@ -1169,7 +1150,7 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
+      <LinearGradient colors={[sunrise.background, sunrise.orangeTint]} style={styles.header}>
         <Text style={styles.headerTitle}>📍 Location & Smart Features</Text>
         <Text style={styles.headerSubtitle}>Location-aware alarms and intelligent recommendations</Text>
       </LinearGradient>
@@ -1183,10 +1164,10 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
               {currentLocation?.address?.city || currentLocation?.address?.region || 'Current Location'}
             </Text>
             <Text style={styles.locationAddress}>
-              {currentLocation?.address ? [
+              {(currentLocation?.address?.street || currentLocation?.address?.city) ? [
                 currentLocation.address.street,
                 currentLocation.address.city
-              ].filter(Boolean).join(', ') : 'Getting location...'}
+              ].filter(Boolean).join(', ') : currentLocation?.coords ? 'Coordinates ready · place name unavailable' : locationBusy ? 'Finding your location…' : 'Tap Refresh Location to begin'}
             </Text>
 
             <Text style={[styles.locationMetaText, { marginBottom: 6 }]}>
@@ -1196,7 +1177,7 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
             <View style={styles.locationMetaRow}>
               <View style={styles.locationMetaLeft}>
                 <Text style={styles.locationMetaText}>
-                  {typeof currentLocation?.accuracy === 'number' ? `GPS ±${Math.round(currentLocation.accuracy)}m` : 'GPS'}
+                  {typeof currentLocation?.accuracy === 'number' ? `Accuracy ±${Math.round(currentLocation.accuracy)}m` : currentLocation?.coords ? 'Saved coordinates' : 'No coordinates yet'}
                   {lastFixAt ? ` • ${formatTimeShort(lastFixAt)}` : ''}
                 </Text>
                 {currentLocation?.coords ? (
@@ -1207,11 +1188,12 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
               </View>
 
               <View style={styles.trackingRow}>
-                <Text style={styles.trackingLabel}>Live</Text>
+                <Text style={styles.trackingLabel}>{!trackingEnabled?'Live updates off':lastSuccessRef.current&&clock-lastSuccessRef.current<120000?'Live location':currentLocation?.coords?'Last known location':'Waiting for a signal'}</Text>
                 <Switch value={trackingEnabled} onValueChange={setTrackingEnabled} />
               </View>
             </View>
 
+            {currentLocation?.address?.attribution&&<Text style={{fontSize:10,color:'#777'}}>{currentLocation.address.attribution}</Text>}
             {locationError ? (
               <Text style={[styles.locationAddress, { marginTop: 8, opacity: 0.9 }]}>
                 {locationError}
@@ -1223,7 +1205,7 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
               onPress={getCurrentLocation}
               disabled={locationBusy}
             >
-              <Text style={styles.refreshButtonText}>{locationBusy ? '…' : '🔄 Refresh Location'}</Text>
+              <Text style={styles.refreshButtonText}>{locationBusy ? 'Finding your location…' : '🔄 Refresh Location'}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1374,8 +1356,8 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
         </View>
       </ScrollView>
 
-      <LocationProfileModal />
-      <TravelModeModal />
+      {LocationProfileModal()}
+      {TravelModeModal()}
     </View>
   );
 };
@@ -1383,7 +1365,7 @@ export const LocationSmartFeatures = ({ userProfile, onUpdateProfile, alarms, on
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: sunrise.background,
   },
   header: {
     padding: 20,
@@ -1392,11 +1374,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: 'white',
+    color: sunrise.ink,
   },
   headerSubtitle: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.8)',
+    color: sunrise.muted,
     marginTop: 4,
   },
   content: {
@@ -1414,16 +1396,16 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: sunrise.ink,
   },
   addButton: {
-    backgroundColor: '#667eea',
+    backgroundColor: sunrise.orangeTint,
     paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 15,
   },
   addButtonText: {
-    color: 'white',
+    color: sunrise.ink,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1442,22 +1424,22 @@ const styles = StyleSheet.create({
   locationName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: sunrise.ink,
   },
   locationAddress: {
     fontSize: 14,
-    color: '#666',
+    color: sunrise.muted,
     marginTop: 4,
   },
   refreshButton: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: sunrise.background,
     padding: 10,
     borderRadius: 8,
     marginTop: 15,
     alignItems: 'center',
   },
   refreshButtonText: {
-    color: '#667eea',
+    color: '#9B4B00',
     fontSize: 14,
     fontWeight: '500',
   },
@@ -1496,7 +1478,7 @@ const styles = StyleSheet.create({
   },
   locationMetaText: {
     fontSize: 12,
-    color: '#666',
+    color: sunrise.muted,
   },
   trackingRow: {
     flexDirection: 'row',
@@ -1504,7 +1486,7 @@ const styles = StyleSheet.create({
   },
   trackingLabel: {
     fontSize: 12,
-    color: '#666',
+    color: sunrise.muted,
     marginRight: 6,
   },
     flex: 1,
@@ -1512,11 +1494,11 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: sunrise.ink,
   },
   profileType: {
     fontSize: 14,
-    color: '#666',
+    color: sunrise.muted,
   },
   deleteButton: {
     padding: 5,
@@ -1526,7 +1508,7 @@ const styles = StyleSheet.create({
   },
   profileAddress: {
     fontSize: 14,
-    color: '#666',
+    color: sunrise.muted,
     marginBottom: 8,
   },
   adjustmentSummary: {
@@ -1536,7 +1518,7 @@ const styles = StyleSheet.create({
   adjustmentText: {
     fontSize: 12,
     color: '#999',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: sunrise.background,
     paddingHorizontal: 8,
   profileMetaRow: {
     flexDirection: 'row',
@@ -1546,7 +1528,7 @@ const styles = StyleSheet.create({
   },
   profileMetaText: {
     fontSize: 12,
-    color: '#666',
+    color: sunrise.muted,
     flex: 1,
     paddingRight: 10,
   },
@@ -1573,12 +1555,12 @@ const styles = StyleSheet.create({
   },
   eventText: {
     fontSize: 14,
-    color: '#333',
+    color: sunrise.ink,
     fontWeight: '600',
   },
   eventTime: {
     fontSize: 12,
-    color: '#666',
+    color: sunrise.muted,
   },
     paddingVertical: 4,
     borderRadius: 4,
@@ -1606,22 +1588,22 @@ const styles = StyleSheet.create({
   travelStatus: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: sunrise.ink,
   },
   travelDestination: {
     fontSize: 14,
-    color: '#666',
+    color: sunrise.muted,
     marginTop: 2,
   },
   travelSetupButton: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: sunrise.background,
     padding: 12,
     borderRadius: 8,
     marginTop: 15,
     alignItems: 'center',
   },
   travelSetupText: {
-    color: '#667eea',
+    color: '#9B4B00',
     fontSize: 14,
     fontWeight: '500',
   },
@@ -1643,44 +1625,40 @@ const styles = StyleSheet.create({
   // recommendationAction styles removed (cards are tappable instead of showing buttons)
   recommendationDescription: {
     fontSize: 14,
-    color: '#666',
+    color: sunrise.muted,
     marginTop: 2,
   },
   recommendationsEmpty: {
     fontSize: 14,
-    color: '#666',
+    color: sunrise.muted,
     marginTop: 6,
     marginBottom: 10,
     lineHeight: 20,
   },
 
   // Modal Styles
-  modalContainer: {
-    flex: 1,
-    paddingTop: 50,
-  },
+  modalContainer: { flex: 1, backgroundColor: sunrise.background },
   modalHeader: {
+    backgroundColor:'#FFF0DB',borderBottomLeftRadius:26,borderBottomRightRadius:26,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.2)',
+    borderBottomColor: sunrise.border,
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: 'white',
+    color: sunrise.ink,
   },
   closeButton: {
     fontSize: 24,
-    color: 'white',
+    color: sunrise.ink,
     padding: 5,
   },
-  modalContent: {
-    flex: 1,
-    padding: 20,
-  },
+  modalContent: { flex: 1 },
+  modalBody: { padding: 20, paddingBottom: 40 },
   modalActions: {
     padding: 20,
   },
@@ -1692,14 +1670,14 @@ const styles = StyleSheet.create({
   formLabel: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: 'white',
+    color: sunrise.ink,
     marginBottom: 8,
   },
   formInput: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: sunrise.orangeTint,
     padding: 15,
     borderRadius: 10,
-    color: 'white',
+    color: sunrise.ink,
     fontSize: 16,
   },
   typeGrid: {
@@ -1708,35 +1686,35 @@ const styles = StyleSheet.create({
   },
   typeOption: {
     width: '31%',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: sunrise.background,
     padding: 12,
     borderRadius: 10,
     margin: '1%',
     alignItems: 'center',
   },
   typeOptionSelected: {
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: sunrise.orangeTint,
     borderWidth: 2,
-    borderColor: 'white',
+    borderColor: sunrise.orange,
   },
   typeIcon: {
     fontSize: 24,
     marginBottom: 4,
   },
   typeName: {
-    color: 'white',
+    color: sunrise.ink,
     fontSize: 12,
     textAlign: 'center',
   },
   currentLocationButton: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: sunrise.background,
     padding: 12,
     borderRadius: 8,
     marginTop: 10,
     alignItems: 'center',
   },
   currentLocationText: {
-    color: 'white',
+    color: sunrise.ink,
     fontSize: 14,
     fontWeight: '500',
   },
@@ -1746,7 +1724,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   adjustmentLabel: {
-    color: 'white',
+    color: sunrise.ink,
     fontSize: 14,
     marginBottom: 8,
   },
@@ -1756,18 +1734,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   adjustmentButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: sunrise.orangeTint,
     padding: 10,
     borderRadius: 6,
     marginHorizontal: 10,
   },
   adjustmentButtonText: {
-    color: 'white',
+    color: sunrise.ink,
     fontSize: 14,
     fontWeight: '500',
   },
   adjustmentValue: {
-    color: 'white',
+    color: sunrise.ink,
     fontSize: 16,
     fontWeight: 'bold',
     minWidth: 60,
@@ -1776,13 +1754,13 @@ const styles = StyleSheet.create({
 
   // Travel Features
   travelFeatures: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: sunrise.background,
     padding: 15,
     borderRadius: 10,
     marginBottom: 20,
   },
   featuresTitle: {
-    color: 'white',
+    color: sunrise.ink,
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 10,
@@ -1791,22 +1769,23 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   featureText: {
-    color: 'rgba(255,255,255,0.9)',
+    color: sunrise.muted,
     fontSize: 14,
   },
 
   // Save Button
   saveButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: sunrise.orange,
     padding: 15,
     borderRadius: 10,
     alignItems: 'center',
   },
   saveButtonText: {
-    color: 'white',
+    color: sunrise.ink,
     fontSize: 18,
     fontWeight: 'bold',
   },
 });
 
 export default LocationSmartFeatures;
+

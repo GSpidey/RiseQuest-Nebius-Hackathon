@@ -1,39 +1,22 @@
-import Geolocation from 'react-native-geolocation-service';
-import { PermissionsAndroid, Platform } from 'react-native';
+import {fetchWithTimeout} from '../services/fetchWithTimeout';
+import {deviceLocation} from '../services/deviceLocation';
 import { getBackendBaseUrl } from '../config/backendConfig';
 
 export const WeatherService = {
   async getCurrentWeather({ requestPermission = false } = {}) {
     try {
-      // Get user location
-      if (Platform.OS === 'android') {
-        const permission = PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION;
-        const granted = await PermissionsAndroid.check(permission)
-          ? PermissionsAndroid.RESULTS.GRANTED
-          : requestPermission ? await PermissionsAndroid.request(permission) : PermissionsAndroid.RESULTS.DENIED;
-        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-          return { error: 'Tap Refresh to allow location for local weather' };
-        }
-      }
-
-      const coords = await new Promise((resolve, reject) => {
-        Geolocation.getCurrentPosition(
-          resolve,
-          reject,
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-        );
-      });
+      const coords = await deviceLocation.current({requestPermission});
 
       const { latitude, longitude } = coords.coords;
       const baseUrl = await getBackendBaseUrl();
-      const resp = await fetch(`${baseUrl}/api/weather/current?lat=${latitude}&lon=${longitude}&units=metric`);
+      const resp = await fetchWithTimeout(`${baseUrl}/api/weather/current?lat=${latitude}&lon=${longitude}&units=metric`,{},15000);
       const data = await resp.json();
-      if (data?.error) return { error: data.error };
+      if (!resp.ok || data?.error) return { error: 'Weather could not refresh. Tap to try again.' };
 
       let city = data.city;
       if (!city) {
         try {
-          const r = await fetch(`${baseUrl}/api/geo/reverse?lat=${latitude}&lon=${longitude}`);
+          const r = await fetchWithTimeout(`${baseUrl}/api/geo/reverse?lat=${latitude}&lon=${longitude}`,{},5000);
           const g = await r.json();
           if (r.ok && !g?.error) {
             city = g.locality || g.formattedAddress || null;
@@ -52,6 +35,7 @@ export const WeatherService = {
         apparentTemperature: data.apparentTemperature ?? null,
         apparentTemperatureExact: apparentExact,
         asOf: data.asOf || null,
+        stale: Boolean(data.stale),
         description: data.description,
         humidity: data.humidity,
         windSpeed: data.windSpeed,
@@ -60,7 +44,7 @@ export const WeatherService = {
       };
     } catch (error) {
       console.error('Weather fetch error:', error);
-      return { error: 'Could not fetch weather data' };
+      return { error: /Allow location/.test(error?.message||'') ? 'Allow location to see your local weather.' : 'Weather could not refresh. Check location and your connection, then try again.' };
     }
   },
 

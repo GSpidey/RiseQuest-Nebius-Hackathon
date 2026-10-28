@@ -1,17 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Modal,
-  Alert,
-  Dimensions,
-  Animated,
-} from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
+import Modal, { AppAlert as Alert } from './AppModal';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Animated } from 'react-native';
+import {sunrise} from './SunriseUI';
 import { MonetizationService } from '../utils/MonetizationService';
+import AdaptiveTraining from '../features/training/AdaptiveTraining';
+import {speak,stopSpeech,stopWhenBackgrounded} from '../features/companion/speech';
+import { getPossibleMoves, moveTile, samePattern } from '../utils/miniGameRules';
 
 const { width, height } = Dimensions.get('window');
 
@@ -28,12 +22,19 @@ export const MiniGameChallengeSystem = ({
   alarmImportance,
   onClose,
 }) => {
+  const [alternative,setAlternative] = useState(null);
   const [currentGame, setCurrentGame] = useState(null);
   const [gameData, setGameData] = useState({});
   const [timeLeft, setTimeLeft] = useState(60);
   const [attempts, setAttempts] = useState(0);
   const [showGameSelector, setShowGameSelector] = useState(true);
   const [accessBusy, setAccessBusy] = useState(false);
+  const [roundStatus, setRoundStatus] = useState('idle');
+  const [feedback, setFeedback] = useState('');
+  const patternTimer = useRef(null);
+  const accessLock = useRef(false);
+  const mounted = useRef(true);
+  const actionLock = useRef(false);
 
   const gameTypes = [
     {
@@ -89,26 +90,28 @@ export const MiniGameChallengeSystem = ({
   };
 
   useEffect(() => {
-    if (currentGame) {
-      initializeGame(currentGame);
-    }
-  }, [currentGame]);
+    mounted.current = true;
+    const stopAudio = stopWhenBackgrounded();
+    return () => { mounted.current = false; clearTimeout(patternTimer.current); stopAudio(); };
+  }, []);
+
+  useEffect(() => { actionLock.current = false; }, [gameData, roundStatus]);
 
   useEffect(() => {
-    if (currentGame && timeLeft > 0) {
-      const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
+    if (currentGame && roundStatus === 'playing' && timeLeft > 0) {
+      const timer = setTimeout(() => setTimeLeft(value => Math.max(0, value - 1)), 1000);
       return () => clearTimeout(timer);
-    } else if (timeLeft === 0) {
+    } else if (currentGame && roundStatus === 'playing' && timeLeft === 0) {
       handleTimeUp();
     }
-  }, [timeLeft, currentGame]);
+  }, [timeLeft, currentGame, roundStatus]);
 
   const GameSelector = () => {
     const availableGames = gameTypes;
 
     return (
-      <Modal visible={showGameSelector} transparent={false}>
-        <LinearGradient colors={['#667eea', '#764ba2']} style={styles.selectorContainer}>
+      <Modal visible={showGameSelector} transparent={false} onRequestClose={onClose}>
+        <ScrollView style={styles.container} contentContainerStyle={styles.selectorContainer} keyboardShouldPersistTaps="handled">
           <View style={styles.selectorHeader}>
             {typeof onClose === 'function' && (
               <TouchableOpacity style={styles.backButton} onPress={onClose}>
@@ -117,17 +120,21 @@ export const MiniGameChallengeSystem = ({
             )}
             <Text style={styles.selectorTitle}>🎮 Choose Your Challenge</Text>
             <Text style={styles.selectorSubtitle}>
-              Complete the challenge to stop snoozing
+              Choose a challenge and give your mind a little practice
             </Text>
           </View>
 
-          <ScrollView style={styles.gameList}>
+          <View style={styles.gameList}>
+            <TouchableOpacity style={styles.gameOption} onPress={()=>{setAlternative('adaptive');setShowGameSelector(false);}} accessibilityRole="button"><Text style={styles.gameIcon}>✨</Text><View style={styles.gameInfo}><Text style={styles.gameName}>Adaptive challenges · Premium</Text><Text style={styles.gameDescription}>Memory grids, numbers, sorting, typing and listening</Text></View></TouchableOpacity>
+            <TouchableOpacity style={styles.gameOption} onPress={()=>{setAlternative('affirmation');setShowGameSelector(false);}} accessibilityRole="button"><Text style={styles.gameIcon}>🔊</Text><View style={styles.gameInfo}><Text style={styles.gameName}>Spoken affirmation · free</Text><Text style={styles.gameDescription}>A calm, untimed alternative with no puzzle to solve</Text></View></TouchableOpacity>
             {availableGames.map(game => (
               <TouchableOpacity
                 key={game.id}
                 style={styles.gameOption}
                 onPress={() => selectGame(game.id)}
                 disabled={accessBusy}
+                accessibilityRole="button"
+                accessibilityLabel={game.name}
               >
                 <Text style={styles.gameIcon}>{game.icon}</Text>
                 <View style={styles.gameInfo}>
@@ -140,7 +147,8 @@ export const MiniGameChallengeSystem = ({
                 <Text style={styles.selectArrow}>▶️</Text>
               </TouchableOpacity>
             ))}
-          </ScrollView>
+          </View>
+          {!!feedback && <Text accessibilityRole="alert" style={styles.memoryInstruction}>{feedback}</Text>}
 
           <View style={styles.difficultyInfo}>
             <Text style={styles.difficultyLabel}>
@@ -150,7 +158,7 @@ export const MiniGameChallengeSystem = ({
               {getDifficultyDescription()}
             </Text>
           </View>
-        </LinearGradient>
+        </ScrollView>
       </Modal>
     );
   };
@@ -166,6 +174,8 @@ export const MiniGameChallengeSystem = ({
             key={index}
             style={styles.answerButton}
             onPress={() => checkMathAnswer(option)}
+            accessibilityRole="button"
+            accessibilityLabel={`Answer ${option}`}
           >
             <Text style={styles.answerText}>{option}</Text>
           </TouchableOpacity>
@@ -212,6 +222,9 @@ export const MiniGameChallengeSystem = ({
                     cell ? styles.memoryCellActive : styles.memoryCellInactive
                   ]}
                   onPress={() => toggleMemoryCell(rowIndex, cellIndex)}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel={`Row ${rowIndex + 1}, column ${cellIndex + 1}`}
+                  accessibilityState={{ checked: cell }}
                 />
               ))}
             </View>
@@ -240,6 +253,8 @@ export const MiniGameChallengeSystem = ({
               tile === 0 && styles.emptyTile
             ]}
             onPress={() => movePuzzleTile(index)}
+            accessibilityRole="button"
+            accessibilityLabel={`Tile ${tile}`}
             disabled={tile === 0}
           >
             {tile !== 0 && (
@@ -315,6 +330,11 @@ export const MiniGameChallengeSystem = ({
         <Text style={styles.physicalHint}>
           {getPhysicalHint()}
         </Text>
+        <TouchableOpacity style={styles.submitButton} accessibilityRole="button"
+          accessibilityLabel="Count one completed movement" onPress={countMovement}>
+          <Text style={styles.submitButtonText}>Count one completed movement</Text>
+        </TouchableOpacity>
+        <Text style={styles.physicalHint}>Self-reported: tap after each movement. Only move in a way that is safe and comfortable for you.</Text>
       </View>
     </View>
   );
@@ -342,30 +362,24 @@ export const MiniGameChallengeSystem = ({
   );
 
   const selectGame = async (gameId) => {
-    if (accessBusy) return;
+    if (accessLock.current) return;
+    accessLock.current = true;
+    setFeedback('');
 
-    // Enforce premium/trial gate for non-basic games (math is always available)
-    if (gameId !== 'math') {
-      setAccessBusy(true);
-      try {
-        const hasAccess = await MonetizationService.checkFeatureAccess(
-          MonetizationService.PREMIUM_FEATURES.UNLIMITED_MINI_GAMES
-        );
-        if (!hasAccess) {
-          await MonetizationService.triggerUpsell('locked_mini_game', { gameType: gameId });
-          return;
-        }
-      } finally {
-        setAccessBusy(false);
-      }
-    }
-
+    // All original games remain free. Adaptive practice has its own subscription gate.
+    accessLock.current = false;
+    if (!mounted.current) return;
     setCurrentGame(gameId);
     setShowGameSelector(false);
-    setTimeLeft((60 * (difficultyLevels[difficulty]?.timeMultiplier || 1)) || 60);
+    setAttempts(0);
+    initializeGame(gameId);
   };
 
   const initializeGame = (gameId) => {
+    clearTimeout(patternTimer.current);
+    setTimeLeft(Math.round(60 * (difficultyLevels[difficulty]?.timeMultiplier || 1)));
+    setFeedback('');
+    setRoundStatus('playing');
     switch (gameId) {
       case 'math':
         initializeMathGame();
@@ -388,7 +402,7 @@ export const MiniGameChallengeSystem = ({
     }
   };
 
-  const initializeMathGame = () => {
+  const initializeMathGame = (currentProblem = 1) => {
     const diffLevel = difficulty === 'adaptive' ? 'normal' : difficulty;
     const operations = ['easy', 'normal'].includes(diffLevel) ? ['+', '-'] : ['+', '-', '*', '/'];
     const operation = operations[Math.floor(Math.random() * operations.length)];
@@ -429,7 +443,7 @@ export const MiniGameChallengeSystem = ({
       problem,
       answer,
       options,
-      currentProblem: 1,
+      currentProblem,
       totalProblems: 3,
       correctAnswers: 0
     });
@@ -449,8 +463,8 @@ export const MiniGameChallengeSystem = ({
     });
 
     // Show pattern for a few seconds
-    setTimeout(() => {
-      setGameData(prev => ({ ...prev, showingPattern: false }));
+    patternTimer.current = setTimeout(() => {
+      if (mounted.current) setGameData(prev => ({ ...prev, showingPattern: false }));
     }, (difficulty === 'easy' ? 5 : difficulty === 'normal' ? 4 : 3) * 1000);
   };
 
@@ -465,6 +479,9 @@ export const MiniGameChallengeSystem = ({
       const possibleMoves = getPossibleMoves(emptyIndex, size);
       const randomMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
       [shuffled[emptyIndex], shuffled[randomMove]] = [shuffled[randomMove], shuffled[emptyIndex]];
+    }
+    if (shuffled.every((tile, index) => tile === solved[index])) {
+      [shuffled[7], shuffled[8]] = [shuffled[8], shuffled[7]];
     }
 
     setGameData({
@@ -495,7 +512,7 @@ export const MiniGameChallengeSystem = ({
 
   const initializePhysicalGame = () => {
     const challenges = [
-      { instruction: 'Shake your phone 10 times', target: 10, type: 'shake' },
+      { instruction: 'Gently raise and lower one hand 10 times', target: 10, type: 'stretch' },
       { instruction: 'Take 5 deep breaths', target: 5, type: 'breathing' },
       { instruction: 'Do 3 jumping jacks', target: 3, type: 'exercise' },
     ];
@@ -533,28 +550,26 @@ export const MiniGameChallengeSystem = ({
   const renderCurrentGame = () => {
     switch (currentGame) {
       case 'math':
-        return <MathChallenge />;
+        return MathChallenge();
       case 'memory':
-        return <MemoryChallenge />;
+        return MemoryChallenge();
       case 'puzzle':
-        return <PuzzleChallenge />;
+        return PuzzleChallenge();
       case 'typing':
-        return <TypingChallenge />;
+        return TypingChallenge();
       case 'physical':
-        return <PhysicalChallenge />;
+        return PhysicalChallenge();
       case 'logic':
-        return <LogicChallenge />;
+        return LogicChallenge();
       default:
         return null;
     }
   };
 
   const handleGameSuccess = () => {
-    Alert.alert(
-      '🎉 Challenge Complete!',
-      'Great job! You can now turn off the alarm.',
-      [{ text: 'OK', onPress: onGameComplete }]
-    );
+    clearTimeout(patternTimer.current);
+    setRoundStatus('complete');
+    setFeedback('Challenge complete!');
   };
 
   const handleGameFailure = () => {
@@ -562,38 +577,81 @@ export const MiniGameChallengeSystem = ({
     const newAttempts = attempts + 1;
     setAttempts(newAttempts);
 
-    if (newAttempts >= maxAttempts) {
-      Alert.alert(
-        '❌ Challenge Failed',
-        'Maximum attempts reached. The alarm will continue.',
-        [{ text: 'Try Again', onPress: onGameFail }]
-      );
-    } else {
-      Alert.alert(
-        '😅 Try Again',
-        `Attempt ${newAttempts}/${maxAttempts}. Keep going!`,
-        [{ text: 'Continue', onPress: () => initializeGame(currentGame) }]
-      );
-    }
+    clearTimeout(patternTimer.current);
+    setRoundStatus(newAttempts >= maxAttempts ? 'failed' : 'retry');
+    setFeedback(newAttempts >= maxAttempts ? 'That round is finished. You can start a fresh round.' : 'Not quite. Try another round.');
   };
 
   const handleTimeUp = () => {
-    Alert.alert(
-      '⏰ Time\'s Up!',
-      'You ran out of time. Try again!',
-      [{ text: 'Restart', onPress: () => initializeGame(currentGame) }]
-    );
+    clearTimeout(patternTimer.current);
+    setRoundStatus('timeout');
+    setFeedback('Time is up. You can try again.');
+  };
+
+  // All answer paths are implemented and guarded against repeat completion.
+  const canAnswer = () => {
+    if (roundStatus !== 'playing' || actionLock.current) return false;
+    actionLock.current = true;
+    return true;
+  };
+  const checkMathAnswer = answer => {
+    if (!canAnswer()) return;
+    if (answer !== gameData.answer) return handleGameFailure();
+    if (gameData.currentProblem >= gameData.totalProblems) return handleGameSuccess();
+    initializeMathGame(gameData.currentProblem + 1);
+  };
+  const toggleMemoryCell = (row, col) => {
+    if (roundStatus !== 'playing' || gameData.showingPattern) return;
+    setGameData(prev => ({ ...prev, userPattern: prev.userPattern.map((cells, r) =>
+      cells.map((cell, c) => r === row && c === col ? !cell : cell)) }));
+  };
+  const checkMemoryPattern = () => {
+    if (!canAnswer() || gameData.showingPattern) return;
+    if (samePattern(gameData.pattern, gameData.userPattern)) handleGameSuccess();
+    else handleGameFailure();
+  };
+  const movePuzzleTile = index => {
+    if (roundStatus !== 'playing') return;
+    const tiles = moveTile(gameData.tiles, index, gameData.size);
+    if (!tiles) return;
+    setGameData(prev => ({ ...prev, tiles, moves: prev.moves + 1 }));
+    if (tiles.every((tile, i) => tile === gameData.solved[i])) handleGameSuccess();
+  };
+  const typeCharacter = key => {
+    if (roundStatus !== 'playing') return;
+    if (key.toLowerCase() !== gameData.targetText[gameData.typedLength]?.toLowerCase()) {
+      setFeedback('Try the highlighted character.'); return;
+    }
+    setFeedback('');
+    const typedLength = gameData.typedLength + 1;
+    setGameData(prev => ({ ...prev, typedLength }));
+    if (typedLength === gameData.targetText.length) handleGameSuccess();
+  };
+  const countMovement = () => {
+    if (!canAnswer()) return;
+    const progress = gameData.progress + 1;
+    setGameData(prev => ({ ...prev, progress }));
+    if (progress >= gameData.target) handleGameSuccess();
+  };
+  const checkLogicAnswer = answer => {
+    if (!canAnswer()) return;
+    if (answer === gameData.answer) handleGameSuccess();
+    else handleGameFailure();
+  };
+  const returnToGames = () => {
+    clearTimeout(patternTimer.current);
+    setCurrentGame(null); setRoundStatus('idle'); setFeedback(''); setShowGameSelector(true);
   };
 
   const getDifficultyDescription = () => {
-    const level = difficultyLevels[difficulty];
+    const level = difficultyLevels[difficulty] || difficultyLevels.normal;
     return `${level?.attemptsAllowed} attempts • ${Math.round(60 * level?.timeMultiplier)}s time limit`;
   };
 
   const getPhysicalHint = () => {
     switch (gameData.type) {
-      case 'shake':
-        return 'Hold your phone and shake it up and down';
+      case 'stretch':
+        return 'Keep your phone still and move comfortably';
       case 'breathing':
         return 'Tap the screen as you inhale and exhale';
       case 'exercise':
@@ -609,37 +667,46 @@ export const MiniGameChallengeSystem = ({
     ['Z', 'X', 'C', 'V', 'B', 'N', 'M', ' ']
   ];
 
+  const leaveAlternative=()=>{stopSpeech();setAlternative(null);setShowGameSelector(true);};
+  if(alternative==='adaptive')return <View style={styles.container}><TouchableOpacity style={{padding:16}} onPress={leaveAlternative}><Text>← All challenges</Text></TouchableOpacity><AdaptiveTraining userProfile={userProfile} onNavigate={leaveAlternative} onRoundComplete={()=>{setAlternative(null);if(onGameComplete)onGameComplete();else setShowGameSelector(true);}}/></View>;
+  if(alternative==='affirmation')return <ScrollView style={styles.container} contentContainerStyle={[styles.gameScreen,{padding:24,justifyContent:'center'}]}><Text style={styles.gameTitle}>One gentle step</Text><Text style={styles.memoryInstruction}>I can begin with one small step. I can pause, adjust, and try again.</Text><TouchableOpacity style={styles.submitButton} onPress={()=>speak('I can begin with one small step. I can pause, adjust, and try again.').catch(()=>Alert.alert('Audio unavailable','Read the words above, or choose another challenge.'))}><Text style={styles.submitButtonText}>Listen</Text></TouchableOpacity><TouchableOpacity style={styles.submitButton} onPress={()=>{stopSpeech();if(onGameComplete)onGameComplete();else leaveAlternative();}}><Text style={styles.submitButtonText}>I’m ready to begin</Text></TouchableOpacity><TouchableOpacity style={styles.giveUpButton} onPress={leaveAlternative}><Text style={styles.giveUpText}>Choose another challenge</Text></TouchableOpacity></ScrollView>;
   return (
     <View style={styles.container}>
-      <GameSelector />
+      {GameSelector()}
       
       {currentGame && (
-        <LinearGradient colors={['#667eea', '#764ba2']} style={styles.gameScreen}>
+        <ScrollView style={styles.container} contentContainerStyle={styles.gameScreen} keyboardShouldPersistTaps="handled">
           <View style={styles.gameHeader}>
             <Text style={styles.timeLeft}>⏱️ {timeLeft}s</Text>
             <Text style={styles.attempts}>
-              Attempt {attempts + 1}/{difficultyLevels[difficulty]?.attemptsAllowed || 3}
+              Attempt {Math.min(attempts + 1, difficultyLevels[difficulty]?.attemptsAllowed || 3)}/{difficultyLevels[difficulty]?.attemptsAllowed || 3}
             </Text>
           </View>
 
-          {renderCurrentGame()}
+          {roundStatus === 'playing' ? renderCurrentGame() : (
+            <View style={styles.gameContainer}>
+              <Text accessibilityRole="alert" style={styles.gameTitle}>{feedback}</Text>
+              <TouchableOpacity style={styles.submitButton} accessibilityRole="button" onPress={() => {
+                if (roundStatus !== 'retry') setAttempts(0);
+                initializeGame(currentGame);
+              }}><Text style={styles.submitButtonText}>Play again</Text></TouchableOpacity>
+              {roundStatus === 'complete' && typeof onGameComplete === 'function' && (
+                <TouchableOpacity style={styles.submitButton} accessibilityRole="button" onPress={onGameComplete}>
+                  <Text style={styles.submitButtonText}>Continue</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+          {roundStatus === 'playing' && !!feedback && <Text accessibilityRole="alert" style={styles.memoryInstruction}>{feedback}</Text>}
 
           <TouchableOpacity
             style={styles.giveUpButton}
-            onPress={() => {
-              Alert.alert(
-                'Give Up?',
-                'The alarm will keep ringing. Are you sure?',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Give Up', onPress: onGameFail }
-                ]
-              );
-            }}
+            accessibilityRole="button"
+            onPress={returnToGames}
           >
-            <Text style={styles.giveUpText}>Give Up</Text>
+            <Text style={styles.giveUpText}>Choose another game</Text>
           </TouchableOpacity>
-        </LinearGradient>
+        </ScrollView>
       )}
     </View>
   );
@@ -648,12 +715,14 @@ export const MiniGameChallengeSystem = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: sunrise.background,
   },
   
   // Game Selector Styles
   selectorContainer: {
-    flex: 1,
-    paddingTop: 50,
+    flexGrow: 1,
+    paddingTop: 44,
+    paddingBottom: 40,
   },
   selectorHeader: {
     padding: 20,
@@ -668,28 +737,27 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.16)',
   },
   backButtonText: {
-    color: 'white',
+    color: sunrise.ink,
     fontWeight: '800',
   },
   selectorTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: 'white',
+    color: sunrise.ink,
     marginBottom: 8,
   },
   selectorSubtitle: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.8)',
+    color: sunrise.muted,
     textAlign: 'center',
   },
   gameList: {
-    flex: 1,
     padding: 20,
   },
   gameOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#FFFFFF',
     padding: 15,
     borderRadius: 12,
     marginBottom: 10,
@@ -702,18 +770,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   gameName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
-    color: 'white',
+    color: sunrise.ink,
   },
   gameDescription: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
+    color: sunrise.muted,
     marginTop: 2,
   },
   supportBadge: {
     fontSize: 12,
-    color: '#81C784',
+    color: '#217F77',
     marginTop: 4,
     fontWeight: '500',
   },
@@ -723,32 +791,33 @@ const styles = StyleSheet.create({
   difficultyInfo: {
     padding: 20,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.2)',
+    borderTopColor: sunrise.border,
   },
   difficultyLabel: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: 'white',
+    color: sunrise.ink,
     textAlign: 'center',
   },
   difficultyDescription: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
+    color: sunrise.muted,
     textAlign: 'center',
     marginTop: 4,
   },
 
   // Game Screen Styles
   gameScreen: {
-    flex: 1,
-    paddingTop: 50,
+    flexGrow: 1,
+    paddingTop: 24,
+    paddingBottom: 40,
   },
   gameHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.2)',
+    borderBottomColor: sunrise.border,
   },
   timeLeft: {
     fontSize: 18,
@@ -757,17 +826,17 @@ const styles = StyleSheet.create({
   },
   attempts: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.8)',
+    color: sunrise.muted,
   },
   gameContainer: {
-    flex: 1,
+    flexGrow: 1,
     padding: 20,
     alignItems: 'center',
   },
   gameTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: 'white',
+    color: sunrise.ink,
     marginBottom: 20,
   },
   giveUpButton: {
@@ -789,7 +858,7 @@ const styles = StyleSheet.create({
   problemText: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: 'white',
+    color: sunrise.ink,
     marginBottom: 30,
     textAlign: 'center',
   },
@@ -800,7 +869,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   answerButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: sunrise.orangeTint,
     padding: 15,
     borderRadius: 10,
     margin: 5,
@@ -808,12 +877,12 @@ const styles = StyleSheet.create({
   },
   answerText: {
     fontSize: 20,
-    color: 'white',
+    color: sunrise.ink,
     textAlign: 'center',
     fontWeight: 'bold',
   },
   progressText: {
-    color: 'rgba(255,255,255,0.8)',
+    color: sunrise.muted,
     fontSize: 16,
     marginTop: 10,
   },
@@ -823,7 +892,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   memoryInstruction: {
-    color: 'white',
+    color: sunrise.ink,
     fontSize: 18,
     marginBottom: 20,
     textAlign: 'center',
@@ -841,16 +910,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#4CAF50',
   },
   memoryCellInactive: {
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: '#DED8D0',
   },
   submitButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: sunrise.orange,
     padding: 15,
     borderRadius: 10,
     marginTop: 20,
   },
   submitButtonText: {
-    color: 'white',
+    color: sunrise.ink,
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -865,7 +934,7 @@ const styles = StyleSheet.create({
   puzzleTile: {
     width: '33.33%',
     height: '33.33%',
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: sunrise.orangeTint,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.5)',
     justifyContent: 'center',
@@ -877,10 +946,10 @@ const styles = StyleSheet.create({
   tileNumber: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: 'white',
+    color: sunrise.ink,
   },
   movesText: {
-    color: 'rgba(255,255,255,0.8)',
+    color: sunrise.muted,
     fontSize: 16,
     marginTop: 20,
   },
@@ -891,7 +960,7 @@ const styles = StyleSheet.create({
   },
   typingText: {
     fontSize: 20,
-    color: 'white',
+    color: sunrise.ink,
     textAlign: 'center',
     marginBottom: 20,
   },
@@ -910,10 +979,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(76, 175, 80, 0.2)',
   },
   untypedChar: {
-    color: 'rgba(255,255,255,0.6)',
+    color: sunrise.muted,
   },
   currentChar: {
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: '#DED8D0',
   },
   keyboard: {
     alignItems: 'center',
@@ -923,14 +992,15 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   keyButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    padding: 10,
+    backgroundColor: sunrise.orangeTint,
+    padding: 5,
     margin: 2,
     borderRadius: 6,
-    minWidth: 30,
+    minWidth: 24,
+    minHeight: 44,
   },
   keyText: {
-    color: 'white',
+    color: sunrise.ink,
     fontSize: 16,
     textAlign: 'center',
     fontWeight: '500',
@@ -942,7 +1012,7 @@ const styles = StyleSheet.create({
   },
   physicalInstruction: {
     fontSize: 20,
-    color: 'white',
+    color: sunrise.ink,
     textAlign: 'center',
     marginBottom: 30,
   },
@@ -950,7 +1020,7 @@ const styles = StyleSheet.create({
     width: 150,
     height: 150,
     borderRadius: 75,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 30,
@@ -958,15 +1028,15 @@ const styles = StyleSheet.create({
   progressNumber: {
     fontSize: 36,
     fontWeight: 'bold',
-    color: 'white',
+    color: sunrise.ink,
   },
   progressTarget: {
     fontSize: 20,
-    color: 'rgba(255,255,255,0.8)',
+    color: sunrise.muted,
   },
   physicalHint: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.8)',
+    color: sunrise.muted,
     textAlign: 'center',
     fontStyle: 'italic',
   },
@@ -977,7 +1047,7 @@ const styles = StyleSheet.create({
   },
   logicQuestion: {
     fontSize: 18,
-    color: 'white',
+    color: sunrise.ink,
     textAlign: 'center',
     marginBottom: 30,
     lineHeight: 24,
@@ -986,16 +1056,17 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   logicOption: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#FFFFFF',
     padding: 15,
     borderRadius: 10,
     marginBottom: 10,
   },
   logicOptionText: {
     fontSize: 16,
-    color: 'white',
+    color: sunrise.ink,
     textAlign: 'center',
   },
 });
 
 export default MiniGameChallengeSystem;
+

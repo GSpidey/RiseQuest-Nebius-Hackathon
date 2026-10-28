@@ -3,15 +3,15 @@ import { View, Text, StyleSheet } from 'react-native';
 import { sunrise, SunriseIcon } from './SunriseUI';
 
 // Decorative context stays outside the screen-reader reading order.
-export default function ModalHeading({ title, description, icon = 'star' }) {
-  return <View style={styles.heading}>
-    <View style={styles.art} accessible={false} importantForAccessibility="no-hide-descendants">
+export default function ModalHeading({ title, description, icon = 'star', compact = false, light = false }) {
+  return <View style={[styles.heading, compact && {flexDirection: 'row', alignItems: 'center', paddingBottom: 0, gap: 12, flex: 1}]}>
+    <View style={[styles.art, compact && {width: 58, height: 58, marginBottom: 0, transform: [{scale: .72}]}]} accessible={false} importantForAccessibility="no-hide-descendants">
       <View style={styles.sun} />
       <View style={styles.orbit} />
       <View style={styles.tile}><SunriseIcon name={icon} size={28} color="#6544BC" /></View>
       <View style={styles.spark} />
     </View>
-    <Text accessibilityRole="header" style={styles.title}>{title}</Text>
+    <Text accessibilityRole="header" style={[styles.title,compact && {flex: 1, textAlign: 'left', fontSize: 21},light && {color: '#FFFFFF'}]}>{title}</Text>
     {!!description && <Text style={styles.description}>{description}</Text>}
   </View>;
 }
@@ -26,3 +26,4 @@ const styles = StyleSheet.create({
   title: { color: sunrise.ink, fontSize: 24, fontWeight: '800', textAlign: 'center' },
   description: { color: sunrise.muted, fontSize: 15, lineHeight: 22, textAlign: 'center', marginTop: 8, maxWidth: 330 },
 });
+

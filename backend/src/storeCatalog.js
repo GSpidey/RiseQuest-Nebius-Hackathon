@@ -1,8 +1,10 @@
+const { PLANS, POINT_PACKS_V2 } = require('./economy');
 const STORE_CATALOG = Object.freeze({
-  'risequest.premium.monthly': { kind: 'subscription', tier: 'premium', plan: 'monthly' },
-  'risequest.premium.yearly': { kind: 'subscription', tier: 'premium', plan: 'yearly' },
-  'risequest.family.monthly': { kind: 'subscription', tier: 'family', plan: 'family_monthly' },
-  'risequest.family.yearly': { kind: 'subscription', tier: 'family', plan: 'family_yearly' },
+  ...Object.fromEntries(Object.entries(POINT_PACKS_V2).map(([pack, value]) => [`risequest.points.${pack}`, {kind: 'points', points: value.points, pack, name: value.name}])),
+  'risequest.premium.monthly': { kind: 'subscription', tier: 'premium', plan: 'monthly', allowance: PLANS.monthly.grant },
+  'risequest.premium.yearly': { kind: 'subscription', tier: 'premium', plan: 'yearly', allowance: PLANS.yearly.grant },
+  'risequest.family.monthly': { kind: 'subscription', tier: 'family', plan: 'family_monthly', allowance: PLANS.family_monthly.grant },
+  'risequest.family.yearly': { kind: 'subscription', tier: 'family', plan: 'family_yearly', allowance: PLANS.family_yearly.grant },
   'risequest.points.small': { kind: 'points', points: 250, pack: 'small' },
   'risequest.points.medium': { kind: 'points', points: 550, pack: 'medium' },
   'risequest.points.large': { kind: 'points', points: 1150, pack: 'large' },
@@ -25,6 +27,7 @@ function applePurchase(claims, accountId, now = Date.now()) {
     originalId: claims.originalTransactionId, environment: claims.environment,
     status: claims.revocationDate ? 'revoked' : product.kind === 'subscription' && claims.expiresDate <= now ? 'expired' : 'active',
     expiresAt: product.kind === 'subscription' ? new Date(claims.expiresDate) : null,
+    grant: product.kind === 'subscription' ? {store: 'apple', period: claims.transactionId, plan: product.plan, paid: claims.price > 0 && !claims.revocationDate && claims.offerDiscountType !== 'FREE_TRIAL', purchasedAt: new Date(claims.purchaseDate)} : null,
     purchasedAt: new Date(claims.purchaseDate), observedAt: new Date(claims.signedDate), points: product.points || 0 };
 }
 function googlePurchase(payload, productId, accountId, tokenHash, now = Date.now()) {
@@ -43,6 +46,7 @@ function googlePurchase(payload, productId, accountId, tokenHash, now = Date.now
   return { id: `google:${tokenHash}`, store: 'google', productId, kind: product.kind, originalId: tokenHash,
     environment: (payload.testPurchase || payload.testPurchaseContext) ? 'Sandbox' : 'Production',
     status: active ? 'active' : revoked ? (subscription ? 'expired' : 'revoked') : 'pending', expiresAt: expiry,
+    grantOrder: subscription ? line.latestSuccessfulOrderId || null : null,
     observedAt: new Date(now), points: product.points || 0 };
 }
 function storeEntitlement(rows, now = Date.now()) {

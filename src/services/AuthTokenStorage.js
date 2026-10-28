@@ -8,7 +8,10 @@ export function onAuthSessionChanged(listener) {
   sessionListeners.add(listener);
   return () => sessionListeners.delete(listener);
 }
-const notifySessionChanged = () => sessionListeners.forEach(listener => listener());
+const notifySessionChanged = () => sessionListeners.forEach(listener => {
+  try { Promise.resolve(listener()).catch(() => console.warn('Session listener could not refresh')); }
+  catch (_) { console.warn('Session listener could not refresh'); }
+});
 
 // Move the existing session, not the account or local alarms. Never fall back to
 // plaintext storage if the device keystore is unavailable.
@@ -58,8 +61,8 @@ export async function setAuthToken(token) {
 export async function clearAuthToken() {
   await migrate();
   await Keychain.resetGenericPassword(options);
-  notifySessionChanged();
   await AsyncStorage.multiRemove(['risequest_auth_token', 'auth_token']);
+  notifySessionChanged();
 }
 
 export async function authHeaders() {

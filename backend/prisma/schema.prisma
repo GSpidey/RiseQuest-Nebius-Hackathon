@@ -29,6 +29,14 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  companionPreferences CompanionPreferences?
+  companionNotes CompanionNote[]
+  moodEntries MoodEntry[]
+  companionMutations CompanionMutation[]
+  providerUsage ProviderUsage[]
+  rechargeAgreement RechargeAgreement?
+  rechargeAttempts RechargeAttempt[]
+  rechargeConsents RechargeConsent[]
   profile UserProfile?
   familyConsents FamilyConsent[]
   managedChildren ChildAccount[] @relation("Guardian")
@@ -36,6 +44,12 @@ model User {
   appleIdentity AppleIdentity?
   storeAccount StoreAccount?
   storePurchases StorePurchase[]
+  xpGrants XpGrant[]
+  cosmetics CosmeticOwnership[]
+  cosmeticLoadout CosmeticLoadout?
+  cosmeticRequests CosmeticPurchaseRequest[] @relation("CosmeticChild")
+  cosmeticApprovals CosmeticPurchaseRequest[] @relation("CosmeticParent")
+  goldenIdentity GoldenIdentity?
 
   quests Quest[]
   stripeCustomer StripeCustomer?
@@ -258,6 +272,13 @@ model Quest {
   description          String   @db.Text
   difficulty           String   @db.Text
   category             String   @db.Text
+  lane String @default("later") @db.Text
+  priority Int @default(1)
+  energyDemand Int @default(3) @map("energy_demand")
+  dueAt DateTime? @map("due_at")
+  plannedAt DateTime? @map("planned_at")
+  lastProgressAt DateTime? @map("last_progress_at")
+  revision Int @default(1)
   breakdownSource      String   @default("legacy") @map("breakdown_source") @db.Text
   status               String   @db.Text
   progress             Int      @default(0)
@@ -609,4 +630,206 @@ model CommunityReport {
   @@index([reporterId])
   @@index([status])
   @@map("community_reports")
+}
+
+model CosmeticOwnership {
+  userId    String   @map("user_id") @db.Text
+  itemId    String   @map("item_id") @db.Text
+  source    String   @db.Text
+  reference String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, itemId])
+  @@map("cosmetic_ownership")
+}
+
+model CosmeticLoadout {
+  userId      String   @id @map("user_id") @db.Text
+  themeId     String?  @map("theme_id") @db.Text
+  soundId     String?  @map("sound_id") @db.Text
+  animationId String?  @map("animation_id") @db.Text
+  badgeIds    Json     @default("[]") @map("badge_ids")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("cosmetic_loadouts")
+}
+
+model CosmeticTheme {
+  id          String   @id @db.Text
+  name        String   @db.Text
+  description String   @db.Text
+  price       Int
+  design      Json
+  published Json?
+  status      String   @default("DRAFT") @db.Text
+  revision    Int      @default(1)
+  createdBy   String   @map("created_by") @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("cosmetic_themes")
+}
+
+
+model CosmeticPurchaseRequest {
+  id         String    @id @default(uuid()) @db.Text
+  childId    String    @map("child_id") @db.Text
+  parentId   String    @map("parent_id") @db.Text
+  consentId  String    @map("consent_id") @db.Text
+  itemIds    Json      @map("item_ids")
+  amount     Int
+  status     String    @default("PENDING") @db.Text
+  requestKey String    @unique @map("request_key") @db.Text
+  createdAt  DateTime  @default(now()) @map("created_at")
+  expiresAt  DateTime  @map("expires_at")
+  resolvedAt DateTime? @map("resolved_at")
+  child      User      @relation("CosmeticChild", fields: [childId], references: [id], onDelete: Cascade)
+  parent     User      @relation("CosmeticParent", fields: [parentId], references: [id], onDelete: Cascade)
+
+  @@index([parentId, status])
+  @@map("cosmetic_purchase_requests")
+}
+
+model ThemeGeneration {
+  id          String   @id @db.Text
+  actorId     String   @map("actor_id") @db.Text
+  requestHash String   @map("request_hash") @db.Text
+  status      String   @default("RUNNING") @db.Text
+  result      Json?
+  diagnostic  String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("theme_generations")
+}
+
+model GoldenIdentity {
+  subject   String   @id @db.Text
+  userId    String   @unique @map("user_id") @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("golden_identities")
+}
+
+model GoldenAuthSession {
+  id        String   @id @db.Text
+  pollHash  String   @unique @map("poll_hash") @db.Text
+  secret    Bytes
+  status    String   @default("PENDING") @db.Text
+  result    Bytes?
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@map("golden_auth_sessions")
+}
+
+model XpGrant {
+  id String @id @db.Text
+  userId String @map("user_id") @db.Text
+  amount Int
+  source String @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, source])
+  @@map("xp_grants")
+}
+
+
+model RechargeAgreement {
+  userId String @id @map("user_id") @db.Text
+  data Json @default("{}")
+  revision Int @default(1)
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("recharge_agreements")
+}
+model RechargeAttempt {
+  id String @id @db.Text
+  userId String @map("user_id") @db.Text
+  agreementRevision Int @map("agreement_revision")
+  amount Int
+  points Int
+  currency String @db.Text
+  pack String @db.Text
+  customerId String @map("customer_id") @db.Text
+  paymentMethod String @map("payment_method") @db.Text
+  period String @db.Text
+  status String @default("reserved") @db.Text
+  stripeId String? @unique @map("stripe_id") @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, period])
+  @@index([status, updatedAt])
+  @@map("recharge_attempts")
+}
+model RechargeConsent {
+  id String @id @default(cuid()) @db.Text
+  userId String @map("user_id") @db.Text
+  revision Int
+  data Json
+  createdAt DateTime @default(now()) @map("created_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, revision])
+  @@map("recharge_consents")
+}
+
+model CompanionPreferences {
+  userId String @id @map("user_id") @db.Text
+  data Json @default("{}")
+  revision Int @default(1)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@map("companion_preferences")
+}
+model CompanionNote {
+  id String @id @db.Text
+  userId String @map("user_id") @db.Text
+  title String @db.Text
+  body String @db.Text
+  pinned Boolean @default(false)
+  questId String? @map("quest_id") @db.Text
+  revision Int @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, updatedAt])
+  @@map("companion_notes")
+}
+model MoodEntry {
+  id String @id @db.Text
+  userId String @map("user_id") @db.Text
+  valence Int
+  energy Int
+  focus Int
+  restless Boolean @default(false)
+  notes String @default("") @db.Text
+  recordedAt DateTime @default(now()) @map("recorded_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, recordedAt])
+  @@map("companion_mood_entries")
+}
+model CompanionMutation {
+  id String @id @db.Text
+  userId String @map("user_id") @db.Text
+  fingerprint String @db.Text
+  result Json
+  createdAt DateTime @default(now()) @map("created_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt])
+  @@map("companion_mutations")
+}
+model ProviderUsage {
+  id String @id @db.Text
+  userId String @map("user_id") @db.Text
+  provider String @db.Text
+  amount Int
+  createdAt DateTime @default(now()) @map("created_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([provider, createdAt])
+  @@index([userId, provider, createdAt])
+  @@map("provider_usage")
 }

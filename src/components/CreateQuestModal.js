@@ -1,3 +1,4 @@
+import Modal from './AppModal';
 /**
  * Create Quest Modal - Quest Creation Interface
  * AI-powered task breakdown with smart categorization
@@ -5,20 +6,8 @@
 
 import { sunrise } from './SunriseUI';
 import ModalHeading from './ModalHeading';
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  Modal,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  Alert,
-  SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView, KeyboardAvoidingView, Platform } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 
 const CreateQuestModal = ({ visible, onClose, onCreate, userProfile }) => {
@@ -30,6 +19,8 @@ const CreateQuestModal = ({ visible, onClose, onCreate, userProfile }) => {
   const [newTag, setNewTag] = useState('');
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const submitting = useRef(false);
 
   const difficulties = [
     { value: 'easy', label: 'Easy', emoji: '🟢', description: '2-3 simple steps' },
@@ -60,6 +51,7 @@ const CreateQuestModal = ({ visible, onClose, onCreate, userProfile }) => {
   };
 
   const resetForm = () => {
+    setErrorMessage('');
     setTitle('');
     setDescription('');
     setDifficulty('medium');
@@ -87,16 +79,19 @@ const CreateQuestModal = ({ visible, onClose, onCreate, userProfile }) => {
   };
 
   const handleCreate = async () => {
+    if (submitting.current) return;
     if (!title.trim()) {
-      Alert.alert('Missing Title', 'Please enter a quest title.');
+      setErrorMessage('Please enter a quest title.');
       return;
     }
 
     if (!description.trim()) {
-      Alert.alert('Missing Description', 'Please enter a quest description to help AI break it down.');
+      setErrorMessage('Please describe what you want to accomplish.');
       return;
     }
 
+    submitting.current = true;
+    setErrorMessage('');
     setLoading(true);
 
     try {
@@ -114,13 +109,15 @@ const CreateQuestModal = ({ visible, onClose, onCreate, userProfile }) => {
       resetForm();
     } catch (error) {
       console.error('Error creating quest:', error);
-      Alert.alert('Error', 'Failed to create quest. Please try again.');
+      setErrorMessage(error?.message || 'Your quest was not saved. Please try again.');
     } finally {
+      submitting.current = false;
       setLoading(false);
     }
   };
 
   const handleClose = () => {
+    if (submitting.current) return;
     resetForm();
     onClose();
   };
@@ -165,9 +162,11 @@ const CreateQuestModal = ({ visible, onClose, onCreate, userProfile }) => {
               </TouchableOpacity>
             </View>
           </LinearGradient>
+          {!!errorMessage && <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={{ color: '#8C2525', padding: 16, backgroundColor: '#FFF0EB' }}>{errorMessage}</Text>}
 
           <ScrollView style={styles.form} contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
             <ModalHeading icon="quests" title="Create Quest" description="Turn something you want to do into manageable steps." />
+            {userProfile?.isGuest && <Text style={styles.sectionSubtitle}>Guest quests use prepared suggestions and stay on this device. They do not sync or earn RisePoints.</Text>}
             {/* Quest Title */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>🎯 Quest Title</Text>
@@ -187,7 +186,7 @@ const CreateQuestModal = ({ visible, onClose, onCreate, userProfile }) => {
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>📝 Description</Text>
               <Text style={styles.sectionSubtitle}>
-                Provide details to help AI create better subtasks
+                {userProfile?.isGuest ? 'Describe your goal for your saved plan' : 'Provide details to help create useful subtasks'}
               </Text>
               <TextInput
                 style={[styles.textInput, styles.textArea]}
@@ -723,3 +722,4 @@ const styles = StyleSheet.create({
 });
 
 export default CreateQuestModal;
+

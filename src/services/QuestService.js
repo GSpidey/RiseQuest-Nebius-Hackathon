@@ -5,7 +5,16 @@ import { createQuestRepository } from './questRepository';
 
 const repository = createQuestRepository({
   storage: AsyncStorage,
-  identity: async () => ({ owner: await AsyncStorage.getItem('risequest_user_id'), token: await getAuthToken() }),
+  identity: async () => {
+    const token = await getAuthToken();
+    const owner = await AsyncStorage.getItem('risequest_user_id');
+    if (!token && await AsyncStorage.getItem('guest_mode') === 'true') {
+      let profile;
+      try { profile = JSON.parse(await AsyncStorage.getItem('user_profile')); } catch (_) {}
+      if (profile?.isGuest && profile.id) return { owner: profile.id, token: null, guest: true };
+    }
+    return { owner, token, guest: false };
+  },
   request: async (session, method, path, body) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 25000);

@@ -1,3 +1,4 @@
+import Modal, { AppAlert as Alert } from './AppModal';
 /**
  * Quest Focus Mode - Distraction-Free Single Step View
  * Minimalist interface showing only the current task step
@@ -5,17 +6,7 @@
 
 import { sunrise } from './SunriseUI';
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  Modal,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  Alert,
-  Dimensions,
-  Animated,
-} from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Dimensions, Animated } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import QuestService from '../services/QuestService';
 
@@ -566,3 +557,4 @@ const styles = StyleSheet.create({
 });
 
 export default QuestFocusMode;
+

@@ -1,19 +1,7 @@
+import ModalHeading from './ModalHeading';
+import Modal, { AppAlert as Alert } from './AppModal';
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Modal,
-  Switch,
-  TextInput,
-  Alert,
-  FlatList,
-  Dimensions,
-  Linking,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch, TextInput, FlatList, Dimensions, Linking, Platform } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Contacts from 'react-native-contacts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -116,12 +104,10 @@ export const SocialEmergencyFeatures = ({ userProfile, onUpdateProfile }) => {
   };
 
   const ContactSelectionModal = () => (
-    <Modal visible={showContactsModal} animationType="slide">
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.modalContainer}>
+    <Modal visible={showContactsModal} animationType="slide" onRequestClose={() => setShowContactsModal(false)}>
+      <LinearGradient colors={['#FFF9F2', '#FFF0DB']} style={styles.modalContainer}>
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>
-            {selectedContactType === 'emergency' ? '🚨 Add Emergency Contact' : '👥 Add Wake-Up Buddy'}
-          </Text>
+          <ModalHeading compact title={selectedContactType === 'emergency' ? 'Add Emergency Contact' : 'Add Wake-Up Buddy'} icon="community"/>
           <TouchableOpacity onPress={() => setShowContactsModal(false)}>
             <Text style={styles.closeButton}>✕</Text>
           </TouchableOpacity>
@@ -194,10 +180,10 @@ export const SocialEmergencyFeatures = ({ userProfile, onUpdateProfile }) => {
   );
 
   const WakeUpBuddyModal = () => (
-    <Modal visible={showBuddyModal} animationType="slide">
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.modalContainer}>
+    <Modal visible={showBuddyModal} animationType="slide" onRequestClose={() => setShowBuddyModal(false)}>
+      <LinearGradient colors={['#FFF9F2', '#FFF0DB']} style={styles.modalContainer}>
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>👥 Wake-Up Buddy System</Text>
+          <View style={{flex:1,paddingTop:8}}><ModalHeading compact title='👥 Wake-Up Buddy System' icon="star"/></View>
           <TouchableOpacity onPress={() => setShowBuddyModal(false)}>
             <Text style={styles.closeButton}>✕</Text>
           </TouchableOpacity>
@@ -277,10 +263,10 @@ export const SocialEmergencyFeatures = ({ userProfile, onUpdateProfile }) => {
   );
 
   const EmergencySettingsModal = () => (
-    <Modal visible={showEmergencyModal} animationType="slide">
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.modalContainer}>
+    <Modal visible={showEmergencyModal} animationType="slide" onRequestClose={() => setShowEmergencyModal(false)}>
+      <LinearGradient colors={['#FFF9F2', '#FFF0DB']} style={styles.modalContainer}>
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>🚨 Emergency Settings</Text>
+          <View style={{flex:1,paddingTop:8}}><ModalHeading compact title='🚨 Emergency Settings' icon="star"/></View>
           <TouchableOpacity onPress={() => setShowEmergencyModal(false)}>
             <Text style={styles.closeButton}>✕</Text>
           </TouchableOpacity>
@@ -578,7 +564,7 @@ export const SocialEmergencyFeatures = ({ userProfile, onUpdateProfile }) => {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
+      <LinearGradient colors={['#FFF9F2', '#FFF0DB']} style={styles.header}>
         <Text style={styles.headerTitle}>👥 Social & Emergency</Text>
         <Text style={styles.headerSubtitle}>Connect with others for accountability and safety</Text>
       </LinearGradient>
@@ -752,11 +738,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: 'white',
+    color: '#252438',
   },
   headerSubtitle: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.8)',
+    color: '#252438',
     marginTop: 4,
   },
   content: {
@@ -777,13 +763,13 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   addButton: {
-    backgroundColor: '#667eea',
+    backgroundColor: '#A65000',
     paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 15,
   },
   addButtonText: {
-    color: 'white',
+    color: '#252438',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -837,7 +823,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   settingsButtonText: {
-    color: '#667eea',
+    color: '#A65000',
     fontSize: 16,
     fontWeight: '500',
   },
@@ -903,7 +889,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   historyStatusText: {
-    color: 'white',
+    color: '#252438',
     fontSize: 10,
     fontWeight: 'bold',
   },
@@ -937,21 +923,22 @@ const styles = StyleSheet.create({
     paddingTop: 50,
   },
   modalHeader: {
+    backgroundColor:'#FFF0DB',borderBottomLeftRadius:26,borderBottomRightRadius:26,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.2)',
+    borderBottomColor: '#F3E3CF',
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: 'white',
+    color: '#252438',
   },
   closeButton: {
     fontSize: 24,
-    color: 'white',
+    color: '#252438',
     padding: 5,
   },
   modalContent: {
@@ -959,7 +946,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   sectionDescription: {
-    color: 'rgba(255,255,255,0.8)',
+    color: '#252438',
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 20,
@@ -967,34 +954,34 @@ const styles = StyleSheet.create({
 
   // Contact Selection
   loadContactsButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#F3E3CF',
     padding: 15,
     borderRadius: 10,
     alignItems: 'center',
     marginBottom: 20,
   },
   loadContactsText: {
-    color: 'white',
+    color: '#252438',
     fontSize: 16,
     fontWeight: '500',
   },
   manualContactForm: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#FFFFFF',
     padding: 15,
     borderRadius: 10,
     marginBottom: 20,
   },
   formLabel: {
-    color: 'white',
+    color: '#252438',
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 10,
   },
   formInput: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#F3E3CF',
     padding: 12,
     borderRadius: 8,
-    color: 'white',
+    color: '#252438',
     fontSize: 16,
     marginBottom: 10,
   },
@@ -1005,7 +992,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   addManualText: {
-    color: 'white',
+    color: '#252438',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -1013,7 +1000,7 @@ const styles = StyleSheet.create({
     maxHeight: 300,
   },
   contactItem: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#FFFFFF',
     padding: 15,
     borderRadius: 10,
     marginBottom: 8,
@@ -1021,13 +1008,13 @@ const styles = StyleSheet.create({
 
   // Buddy Features
   buddyFeatures: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#FFFFFF',
     padding: 15,
     borderRadius: 10,
     marginBottom: 20,
   },
   featuresTitle: {
-    color: 'white',
+    color: '#252438',
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 15,
@@ -1042,7 +1029,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   featureText: {
-    color: 'rgba(255,255,255,0.9)',
+    color: '#252438',
     fontSize: 14,
     flex: 1,
   },
@@ -1059,12 +1046,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   inviteButtonText: {
-    color: 'white',
+    color: '#252438',
     fontSize: 16,
     fontWeight: 'bold',
   },
   settingsSection: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#FFFFFF',
     padding: 15,
     borderRadius: 10,
   },
@@ -1075,7 +1062,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   settingLabel: {
-    color: 'white',
+    color: '#252438',
     fontSize: 16,
     flex: 1,
   },
@@ -1094,18 +1081,18 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   numberButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#F3E3CF',
     padding: 10,
     borderRadius: 6,
     marginHorizontal: 10,
   },
   numberButtonText: {
-    color: 'white',
+    color: '#252438',
     fontSize: 16,
     fontWeight: 'bold',
   },
   numberValue: {
-    color: 'white',
+    color: '#252438',
     fontSize: 18,
     fontWeight: 'bold',
     minWidth: 40,
@@ -1126,21 +1113,22 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   saveButtonText: {
-    color: 'white',
+    color: '#252438',
     fontSize: 18,
     fontWeight: 'bold',
   },
   testButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#F3E3CF',
     padding: 15,
     borderRadius: 10,
     alignItems: 'center',
   },
   testButtonText: {
-    color: 'white',
+    color: '#252438',
     fontSize: 16,
     fontWeight: '500',
   },
 });
 
 export default SocialEmergencyFeatures;
+

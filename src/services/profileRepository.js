@@ -32,7 +32,10 @@ function createProfileRepository({ storage, request, identity }) {
       photoUrl: account.photoUrl, bannerUrl: account.bannerUrl, authProvider: account.authProvider, isGuest: false };
     // Do not erase locally cached identity when the startup caller has only ID.
     Object.keys(canonical).forEach(k => canonical[k] === undefined && delete canonical[k]);
-    if (result.profile) return cache({ ...cached, ...result.profile, ...canonical, syncPending: false }, owner);
+    if (result.profile) {
+      const previousIdentity = cached ? Object.fromEntries(['displayName','phoneNumber','photoUrl','bannerUrl','authProvider'].map(k=>[k,cached[k]])) : {};
+      return cache({ ...(result.profile.onboardingCompleted ? cached : previousIdentity), ...result.profile, ...canonical, syncPending: false }, owner);
+    }
     const marker = await storage.getItem(`risequest_onboarded_email:${owner}`);
     if (cached && cached.ageGroup && marker === 'true' && !cached.version) {
       const migrated = await request('PUT', { version: 0, profile: cached, complete: true });
